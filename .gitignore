@@ -1,0 +1,26 @@
+# 白名单模式：只包含指定的 5 个 skills
+
+# 默认排除所有内容
+/*
+
+# 保留 .git 目录
+!.git
+!.gitignore
+
+# 白名单：只包含这 5 个 skills
+!phase1-test/
+!phase2-cnnvd-report-cdp/
+!phase2-cnvd-report-cdp/
+!vulnerability-alert-processor/
+!wechat-mp-publisher/
+
+# 排除 skills 内部的子目录中的 .git（如果有）
+phase1-test/**/.git
+phase2-cnnvd-report-cdp/**/.git
+phase2-cnvd-report-cdp/**/.git
+vulnerability-alert-processor/**/.git
+wechat-mp-publisher/**/.git
+
+# 排除 .DS_Store
+.DS_Store
+**/.DS_Store
