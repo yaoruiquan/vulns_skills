@@ -1,218 +1,285 @@
 # phase2-cnvd-report-cdp
 
-通过 chrome-devtools-mcp 控制浏览器完成 CNVD 漏洞上报。
+通过 Chrome DevTools MCP 控制真实浏览器完成 CNVD 漏洞上报。
 
-## 概述
+这个 README 面向第一次接手这个 skill 的用户，重点说明三件事：
 
-本 Skill 用于自动化完成 CNVD（国家信息安全漏洞共享平台）漏洞上报流程。基于 MCP (Model Context Protocol) 协议，通过 chrome-devtools-mcp 控制真实浏览器进行操作。
+- 这个 skill 负责什么。
+- 需要哪些本地依赖和数据。
+- 浏览器如何隔离，避免和你的日常 Chrome 冲突。
 
-## 技术架构
+## 这个 skill 做什么
 
-```
-┌─────────────────┐   MCP Protocol   ┌─────────────────┐
-│  Claude Code    │ ───────────────→ │ chrome-devtools │
-│  Agent          │                  │ -mcp (Puppeteer)│
-└─────────────────┘ ←─────────────── └─────────────────┘
-                      Browser Control    │
-                                        ▼
-                                 ┌─────────────────┐
-                                 │  Chrome Browser │
-                                 └─────────────────┘
-```
+`phase2-cnvd-report-cdp` 负责把已经整理好的漏洞材料提交到 CNVD 平台。典型流程包括：
 
-## 文件结构
+- 从本地 `docx` 材料提取字段。
+- 准备待上传的附件压缩包。
+- 通过 Chrome DevTools MCP 打开 CNVD 页面并填写表单。
+- 处理验证码、上传附件、提交并记录上报结果。
 
-```
-phase2-cnvd-report-cdp/
-├── SKILL.md                  # 执行流程文档（Agent 入口）
-├── README.md                 # 本文件
-├── scripts/                  # 可执行脚本
-│   ├── extract_vuln_data.py  # 从 docx 提取漏洞数据
-│   ├── compress_zip.py       # 压缩附件文件夹
-│   └── captcha_ocr.py        # 验证码 OCR 识别
-└── references/               # 参考文档
-    ├── selectors.md          # CNVD 表单 CSS 选择器
-    ├── mcp-tools.md          # MCP 工具详细参考
-    └── error-handling.md     # 错误处理指南
-```
+## 新用户上手
 
-## 前提条件
-
-### 1. 安装 chrome-devtools-mcp
+### 1. 安装依赖
 
 ```bash
 npm install -g chrome-devtools-mcp@latest
+pip install websocket-client python-docx openpyxl ddddocr
 ```
 
-### 2. 配置 MCP
+### 2. 确认项目级 MCP 配置
 
-在项目根目录 `.mcp.json` 中添加：
+当前目录自带：
+
+- `./.mcp.json`
+- `./.claude/settings.json`
+
+两者都应该指向当前 skill 的本地 wrapper：
 
 ```json
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "args": []
     }
   }
 }
 ```
 
-### 3. 依赖安装
+推荐做法：
+
+- 在本 skill 目录里启动 Claude Code。
+- 让当前目录的 `.mcp.json` 生效。
+- 不改全局 `~/.mcp.json`。
+
+### 3. 启动当前 skill 专用浏览器
 
 ```bash
-# Python 依赖（用于数据提取脚本）
-pip install websocket-client python-docx openpyxl
-
-# OCR 验证码识别
-pip install ddddocr
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
 ```
 
-## 使用方法
-
-```
-/phase2-cnvd-report-cdp DAS-T105966 --folder "/path/to/CNVD-folder"
-```
-
-### 辅助脚本
+如果 CNVD 打开后直接落到 Cloudflare 521，优先改用：
 
 ```bash
-# 提取漏洞数据
-python scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
-
-# 压缩附件
-python scripts/compress_zip.py "/path/to/CNVD-folder"
-
-# 验证码 OCR 识别
-python scripts/captcha_ocr.py /tmp/captcha.png
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
 ```
 
-## 执行流程
+可选启动模式：
 
-```
-Step 1: 准备数据
-    ├─ extract_vuln_data.py 提取漏洞信息
-    └─ compress_zip.py 压缩附件
+- `isolated`：纯隔离 profile，默认值。
+- `seed-default`：先把你日常 Chrome 的 `Default` profile 快照复制到 skill profile，再打开调试端口。CNVD 场景优先推荐这个。
+- `live-default`：直接挂到你日常 Chrome 的用户数据目录。只有在 `seed-default` 仍被 Cloudflare 拦截时再用，并且先关闭普通 Chrome。
 
-Step 2: 导航表单
-    ├─ navigate_page → CNVD 首页
-    ├─ OCR 自动识别登录验证码
-    ├─ click → 用户中心
-    └─ click → 立即漏洞上报
-
-Step 3: 填写表单
-    ├─ fill → 切换表单类型
-    ├─ fill_form → 基本信息
-    ├─ fill_form → 厂商信息
-    └─ fill_form → 漏洞详情
-
-Step 4: 上传附件
-    └─ upload_file → 上传 zip
-
-Step 5: 提交
-    ├─ take_screenshot → 截图验证码
-    ├─ captcha_ocr.py → OCR 识别
-    ├─ fill → 填入验证码
-    ├─ click → 提交
-    └─ evaluate_script → 提取 CNVD-ID
-```
-
-## 核心脚本说明
-
-### extract_vuln_data.py
-
-从 docx 文件提取漏洞数据：
+### 4. 检查浏览器调试端口
 
 ```bash
-python scripts/extract_vuln_data.py DAS-T105966 --platform CNVD
+curl -s http://127.0.0.1:9332/json/version
 ```
 
-输出 JSON：
-```json
-{
-  "das_id": "DAS-T105966",
-  "title": "漏洞名称",
-  "vuln_type": "binaryVulnerability",
-  "description": "漏洞描述",
-  "unit_name": "厂商",
-  "affected_product": "影响产品",
-  "version": "影响版本"
-}
+能返回 JSON，说明 skill 专用 Chrome 已启动。
+
+### 5. 检查 MCP 工具
+
+在 Claude 会话里测试：
+
+- `list_pages`
+- `navigate_page`
+- `take_snapshot`
+
+如果这些工具能正常工作，说明 `chrome-devtools` 已经接管到正确的浏览器实例。
+
+## 浏览器与端口隔离
+
+这个 skill 默认使用独立的浏览器实例，而不是你的日常 Chrome。
+
+固定配置：
+
+- 调试端口：`9332`
+- 独立 profile：`~/.claude/chrome-profiles/cnvd-report`
+- MCP wrapper：`scripts/chrome-devtools-mcp-wrapper.sh`
+- 浏览器启动脚本：`scripts/start-chrome-debug.sh`
+
+这样做的原因：
+
+- CNVD 上报流程会登录真实账号，不应该混入你的日常浏览器 profile。
+- 这个 skill 需要稳定的调试端口，不能和别的 skill 抢占同一个端口。
+- 即使浏览器卡住，也只影响这个 skill，不影响日常办公。
+
+### 为什么现在只会看到一个 Chrome 实例
+
+现在的架构是“一个真实 Chrome + 一个 MCP 进程 attach 到它”，不是“两套可见 Chrome”。
+
+- `scripts/start-chrome-debug.sh` 只负责启动一个带 `9332` 端口的真实 Chrome。
+- `scripts/chrome-devtools-mcp-wrapper.sh` 只负责把 `chrome-devtools-mcp` 连接到 `http://127.0.0.1:9332`。
+- `chrome-devtools-mcp` 通过 `--browserUrl` attach 到现有浏览器，不会再额外拉起第二个可见窗口。
+
+如果你以前见过两个实例，通常是因为手工启动了一个调试 Chrome，同时 MCP 又按默认行为自己启动了一套 automation Chrome。现在这个 skill 已经把浏览器生命周期收敛到 skill 脚本里，MCP 只接管，不再负责启动第二套浏览器。
+
+但 CNVD 前面挂了 Cloudflare 时，完全干净的隔离 profile 可能反而更像机器人。这个 skill 现在支持在保留调试端口隔离的前提下，复用你真实 Chrome 的指纹和 cookies。
+
+### 与日常 Chrome 如何共存
+
+- 日常 Chrome：正常启动，不带 `--remote-debugging-port`。
+- 本 skill Chrome：只通过 `start-chrome-debug.sh` 启动，固定监听 `9332`。
+- 如果要用 `live-default`，先彻底退出普通 Chrome，再启动 skill 浏览器，避免同一个用户数据目录被两个实例同时占用。
+
+只要保持这条边界，CNVD 自动化和你的主浏览器就能同时存在。
+
+## 目录结构
+
+```text
+phase2-cnvd-report-cdp/
+├── SKILL.md
+├── README.md
+├── .mcp.json
+├── .claude/settings.json
+├── scripts/
+│   ├── chrome-devtools-mcp-wrapper.sh
+│   ├── start-chrome-debug.sh
+│   ├── extract_vuln_data.py
+│   ├── compress_zip.py
+│   └── captcha_ocr.py
+└── references/
+    ├── captcha-ocr.md
+    ├── error-handling.md
+    ├── mcp-connection.md
+    ├── mcp-tools.md
+    └── selectors.md
 ```
 
-## 字段映射
+## 常用命令
 
-### 漏洞类型
+### 提取漏洞数据
 
-| 中文 | 值 |
-|------|---|
-| SQL注入 | sqlInjectionVulnerability |
-| XSS | xssVulnerability |
-| 命令执行 | remoteCommandExecution |
-| 二进制 | binaryVulnerability |
-| 信息泄露 | informationLeakage |
-| 其他 | other |
+```bash
+python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
+```
 
-### 影响对象类型
+### 压缩附件目录
 
-| 中文 | 值 |
-|------|---|
-| 操作系统 | 27 |
-| 应用程序 | 28 |
-| WEB应用 | 29 |
-| 数据库 | 30 |
+```bash
+python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/compress_zip.py "/path/to/CNVD-folder"
+```
 
-## 注意事项
+### OCR 识别验证码
 
-1. **验证码处理**：使用 ddddocr 自动识别验证码，无需人工介入
-   - 登录验证码：中文词语（如"读书"），识别率约 80%
-   - 提交验证码：字母数字组合（如"db3D"），识别率约 50-70%
-   - 如识别失败，重新截图并重试即可
-2. **表单类型切换**：CNVD 有两种表单模式，必须先切换到"通用型漏洞"
-3. **文件上传**：使用 MCP 的 `upload_file` 工具上传 zip 附件
+```bash
+python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/captcha_ocr.py /tmp/captcha.png
+```
+
+## 推荐工作流
+
+1. 在本目录启动 Claude Code。
+2. 启动 skill 专用浏览器。
+3. 用 `curl localhost:9332/json/version` 确认端口在线。
+4. 运行 `extract_vuln_data.py` 提取 docx 数据。
+5. 运行 `compress_zip.py` 准备上传附件。
+6. 让 Claude 使用 `chrome-devtools` 工具进入 CNVD 页面。
+7. 登录、切换到通用型漏洞、填写表单、上传附件、提交。
+
+## 数据与表单的关系
+
+`extract_vuln_data.py` 会从本地材料中提取出 CNVD 提交所需的关键字段，例如：
+
+- `title`
+- `description`
+- `vuln_type`
+- `unit_name`
+- `affected_product`
+- `version`
+- `folder_path`
+- `docx_path`
+
+这些字段随后会被 Claude 填入浏览器表单。
+
+## 执行流程概览
+
+1. 准备数据
+2. 打开 CNVD 首页
+3. 登录并处理验证码
+4. 导航到漏洞上报页
+5. 切换到正确的表单类型
+6. 填写基本信息和漏洞详情
+7. 上传 zip 附件
+8. 识别提交验证码并提交
+9. 记录返回的 CNVD 编号
+
+## 常见问题
+
+### `9332` 端口打不开
+
+重新执行：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+```
+
+如果你要复用日常 profile，也可以明确指定模式：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+```
+
+### Claude 连到了错误的浏览器
+
+通常是因为：
+
+- 你不是在本目录启动 Claude Code。
+- 会话读取了别的 `.mcp.json`。
+- 你的日常 Chrome 也暴露了调试端口。
+
+优先修正目录和 MCP 配置，不要在同一个 skill 里混用全局浏览器配置。
+
+### 为什么现在不再出现两个可见 Chrome
+
+因为这个 skill 现在固定走“先启动 skill Chrome，再由 MCP attach”的路径。只要你使用本目录的 `.mcp.json` 和 `scripts/start-chrome-debug.sh`，就只会有一个被接管的可见实例。
+
+### CNVD 打开后是验证码保护页
+
+这是站点自身行为，不是 skill 或 MCP 配置错误。浏览器和端口正常时，页面可达但可能要求额外验证码验证。
+
+### CNVD 打开后是 Cloudflare 521
+
+这通常不是 CNVD 源站真的宕机，而是 Cloudflare 把当前浏览器实例判成了可疑流量。优先按下面顺序处理：
+
+1. 用真实 Chrome 足迹启动：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+```
+
+2. 如果还不行，彻底退出普通 Chrome 后再试：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh live-default
+```
+
+3. 如果你本机默认不是 `Default` profile，可以先设置：
+
+```bash
+export CLAUDE_CHROME_PROFILE_DIRECTORY="Profile 1"
+```
+
+然后再启动上面的命令。
+
+## 与其他技能的关系
+
+典型链路：
+
+```text
+phase1-test / 材料整理
+  -> 生成 docx 和附件
+phase2-cnvd-report-cdp
+  -> 完成 CNVD 上报
+phase2-cnnvd-report-cdp
+  -> 可继续做 CNNVD 上报
+```
 
 ## 参考文档
 
-| 文档 | 说明 |
-|------|------|
-| [captcha-ocr.md](references/captcha-ocr.md) | 验证码 OCR 自动识别详细说明 |
-| [mcp-connection.md](references/mcp-connection.md) | chrome-devtools MCP 连接原理与经验 |
-| [selectors.md](references/selectors.md) | CNVD 表单 CSS 选择器 |
-| [mcp-tools.md](references/mcp-tools.md) | MCP 工具详细参考 |
-| [error-handling.md](references/error-handling.md) | 错误处理指南 |
-
----
-
-## 与其他 Skill 的关系
-
-```
-phase1-test (材料整理)
-    │
-    ▼ 生成 docx 文件
-phase2-cnvd-report-cdp (本 Skill)
-    │
-    ▼ 获取 CNVD-ID
-phase3-archive (归档，待开发)
-```
-
-## 相关链接
-
-- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)
-- [CNVD 官网](https://www.cnvd.org.cn/)
-
-## 更新日志
-
-- **2026-04-03**: 添加验证码 OCR 自动识别
-  - 使用 ddddocr 库识别验证码
-  - 登录验证码（中文词语）识别率约 80%
-  - 提交验证码（字母数字）识别率约 50-70%
-  - 实现全自动化流程，无需人工介入
-- **2026-04-03**: chrome-devtools MCP 连接成功
-  - 解决警告信息干扰 MCP 协议握手问题
-  - 添加 wrapper 脚本过滤 stderr 警告
-  - 验证可正常访问 CNVD 等有防火墙保护的网站
-- **2026-04-02**: 初始版本，基于 chrome-devtools-mcp 实现
-  - 支持完整的 CNVD 上报流程
-  - 提供数据提取和附件压缩脚本
-  - 包含完整的参考文档
+- [SKILL.md](./SKILL.md)
+- [captcha-ocr.md](./references/captcha-ocr.md)
+- [mcp-connection.md](./references/mcp-connection.md)
+- [mcp-tools.md](./references/mcp-tools.md)
+- [selectors.md](./references/selectors.md)
+- [error-handling.md](./references/error-handling.md)

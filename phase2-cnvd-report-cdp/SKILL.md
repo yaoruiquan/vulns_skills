@@ -16,7 +16,7 @@ npm install -g chrome-devtools-mcp@latest
 
 ### 1.2 配置 MCP
 
-在 `~/.mcp.json` 中配置：
+在当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 中配置：
 
 ```json
 {
@@ -29,21 +29,29 @@ npm install -g chrome-devtools-mcp@latest
 }
 ```
 
-并在 `~/.claude/settings.json` 中添加：
-
-```json
-{
-  "enableAllProjectMcpServers": true
-}
-```
-
 ### 1.3 启动 Chrome（调试端口）
 
 ```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9223 \
-  --user-data-dir=/tmp/chrome-debug-cnvd
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
 ```
+
+该 skill 的固定隔离配置：
+
+- 调试端口：`9332`
+- 独立 profile：`~/.claude/chrome-profiles/cnvd-report`
+- 与日常 Chrome 默认 profile 隔离
+
+如果 CNVD 首页返回 Cloudflare 521，优先改用：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+```
+
+启动模式说明：
+
+- `isolated`：纯隔离 profile，默认值。
+- `seed-default`：先复制日常 Chrome 的 `Default` profile 到 skill profile，再用 `9332` 启动。
+- `live-default`：直接使用日常 Chrome 的用户数据目录。只有 `seed-default` 仍被拦截时再用，并先关闭普通 Chrome。
 
 ---
 
@@ -64,7 +72,7 @@ Step 0: 检查环境 → Step 1: 准备数据 → Step 2: 导航表单 → Step 
 #### 0.1 检查 Chrome 调试端口
 
 ```bash
-curl -s http://localhost:9223/json/version
+curl -s http://localhost:9332/json/version
 ```
 
 **预期输出**：
@@ -72,17 +80,20 @@ curl -s http://localhost:9223/json/version
 {
   "Browser": "Chrome/xxx.x.xxxx.xx",
   "Protocol-Version": "1.3",
-  "webSocketDebuggerUrl": "ws://localhost:9223/devtools/browser/xxx"
+  "webSocketDebuggerUrl": "ws://localhost:9332/devtools/browser/xxx"
 }
 ```
 
 **如果无输出或连接失败**：
 
 ```bash
-# 启动 Chrome 调试模式
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9223 \
-  --user-data-dir=/tmp/chrome-debug-cnvd &
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+```
+
+**如果页面能打开但 CNVD 返回 Cloudflare 521**：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
 ```
 
 #### 0.2 检查 MCP 连接状态
@@ -94,7 +105,7 @@ MCP: list_pages
 **预期输出**：返回当前浏览器打开的页面列表。
 
 **如果返回错误**：
-1. 检查 `~/.mcp.json` 配置是否正确
+1. 检查当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 是否正确
 2. 检查 MCP server 是否启动：`ps aux | grep chrome-devtools-mcp`
 3. 重启 Claude Code 会话
 
@@ -102,7 +113,7 @@ MCP: list_pages
 
 | 检查项 | 命令/操作 | 预期结果 |
 |--------|----------|----------|
-| Chrome 调试端口 | `curl localhost:9223/json/version` | 返回 JSON |
+| Chrome 调试端口 | `curl localhost:9332/json/version` | 返回 JSON |
 | MCP 连接 | `list_pages` | 返回页面列表 |
 | 登录状态 | 打开 CNVD 首页检查 | 已登录/未登录 |
 

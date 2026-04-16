@@ -16,34 +16,42 @@ npm install -g chrome-devtools-mcp@latest
 
 ### 1.2 配置 MCP
 
-在 `~/.mcp.json` 中配置：
+在当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 中配置：
 
 ```json
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
 }
 ```
 
-并在 `~/.claude/settings.json` 中添加：
-
-```json
-{
-  "enableAllProjectMcpServers": true
-}
-```
-
 ### 1.3 启动 Chrome（调试端口）
 
 ```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9223 \
-  --user-data-dir=/tmp/chrome-debug-cnnvd
+/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh
 ```
+
+该 skill 的固定隔离配置：
+
+- 调试端口：`9333`
+- 独立 profile：`~/.claude/chrome-profiles/cnnvd-report`
+- 与日常 Chrome 默认 profile 隔离
+
+如果站点保护页、登录态或浏览器足迹有问题，优先改用：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+```
+
+启动模式说明：
+
+- `isolated`：纯隔离 profile，默认值。
+- `seed-default`：先复制日常 Chrome 的 `Default` profile 到 skill profile，再用 `9333` 启动。
+- `live-default`：直接使用日常 Chrome 的用户数据目录。只有 `seed-default` 仍不够时再用，并先关闭普通 Chrome。
 
 ### 1.4 安装 OCR 依赖
 
@@ -75,7 +83,7 @@ Step 0: 检查环境 → Step 1: 准备数据 → Step 2: 导航登录 → Step 
 #### 0.1 检查 Chrome 调试端口
 
 ```bash
-curl -s http://localhost:9223/json/version
+curl -s http://localhost:9333/json/version
 ```
 
 **预期输出**：
@@ -83,17 +91,20 @@ curl -s http://localhost:9223/json/version
 {
   "Browser": "Chrome/xxx.x.xxxx.xx",
   "Protocol-Version": "1.3",
-  "webSocketDebuggerUrl": "ws://localhost:9223/devtools/browser/xxx"
+  "webSocketDebuggerUrl": "ws://localhost:9333/devtools/browser/xxx"
 }
 ```
 
 **如果无输出或连接失败**：
 
 ```bash
-# 启动 Chrome 调试模式
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9223 \
-  --user-data-dir=/tmp/chrome-debug-cnnvd &
+/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh
+```
+
+**如果需要复用日常 Chrome 足迹**：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
 ```
 
 #### 0.2 检查 MCP 连接状态
@@ -105,7 +116,7 @@ MCP: list_pages
 **预期输出**：返回当前浏览器打开的页面列表。
 
 **如果返回错误**：
-1. 检查 `~/.mcp.json` 配置是否正确
+1. 检查当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 是否正确
 2. 检查 MCP server 是否启动：`ps aux | grep chrome-devtools-mcp`
 3. 重启 Claude Code 会话
 
@@ -113,7 +124,7 @@ MCP: list_pages
 
 | 检查项 | 命令/操作 | 预期结果 |
 |--------|----------|----------|
-| Chrome 调试端口 | `curl localhost:9223/json/version` | 返回 JSON |
+| Chrome 调试端口 | `curl localhost:9333/json/version` | 返回 JSON |
 | MCP 连接 | `list_pages` | 返回页面列表 |
 | 登录状态 | 打开 CNNVD 首页检查 | 已登录/未登录 |
 
@@ -266,9 +277,9 @@ MCP: take_snapshot
 MCP: fill_form
   elements:
     - uid: "<用户名输入框的 uid>"
-      value: "424513394@qq.com"
+      value: "tina.zhang@dbappsecurity.com.cn"
     - uid: "<密码输入框的 uid>"
-      value: "wans1230.."
+      value: "Dbapp@12345"
 ```
 
 ##### 2.3.3 OCR 识别验证码
@@ -664,7 +675,10 @@ MCP: evaluate_script
 
 #### 5.3 上传验证录像
 
-**重要**：如果有验证视频，必须上传。视频文件通常位于 `<CNNVD文件夹>/poc验证视频/` 目录下。
+**重要**：如果有验证视频，必须上传。视频文件可能位于以下两个目录之一：
+
+- `<CNNVD文件夹>/poc验证视频/`
+- `<CNNVD文件夹>/exp验证视频/`
 
 **步骤 A：选择"有"验证录像**
 
@@ -680,12 +694,16 @@ MCP: click
 MCP: take_snapshot
 MCP: upload_file
   uid: "<点击上传按钮的 uid>"
-  filePath: "<CNNVD文件夹>/poc验证视频/<视频文件名>"
+  filePath: "<CNNVD文件夹>/<poc验证视频或exp验证视频>/<视频文件名>"
 ```
 
 **验证视频路径示例**：
 ```
-/Users/yao/Documents/网安- AI应用开发/监管上报/2026-04-09-112250/DAS-T105979-xxx/CNNVD-xxx/poc验证视频/5c9f8f26-bb02-45e8-9466-35779efaca3f.mp4
+# poc验证视频目录
+/Users/yao/Documents/网安- AI应用开发/监管上报/杭州安恒信息原创漏洞报送7个/DAS-T105995-xxx/CNNVD-xxx/poc验证视频/xxx.mp4
+
+# exp验证视频目录
+/Users/yao/Documents/网安- AI应用开发/监管上报/杭州安恒信息原创漏洞报送7个/DAS-T105995-xxx/CNNVD-xxx/exp验证视频/xxx.mp4
 ```
 
 **注意**：
@@ -694,6 +712,11 @@ MCP: upload_file
 - **必须先选择"有"选项，上传按钮才会变为可用状态**
 
 #### 5.4 上传 PoC 附件
+
+**重要**：PoC 附件可能位于以下两个目录之一：
+
+- `<CNNVD文件夹>/exp/` （通常是 zip 文件）
+- `<CNNVD文件夹>/poc/` （通常是 zip 文件）
 
 **步骤 A：选择 PoC 属性**
 
@@ -708,7 +731,16 @@ MCP: click
 MCP: take_snapshot
 MCP: upload_file
   uid: "<点击上传按钮的 uid>"
-  filePath: "/tmp/<DAS-ID>-CNNVD.zip"
+  filePath: "<CNNVD文件夹>/<exp或poc>/<PoC文件名>.zip"
+```
+
+**PoC 附件路径示例**：
+```
+# exp 目录
+/Users/yao/Documents/网安- AI应用开发/监管上报/杭州安恒信息原创漏洞报送7个/DAS-T105995-xxx/CNNVD-xxx/exp/24b80411-bd8b-47e2-9a4d-de2c6f7be8ba.zip
+
+# poc 目录
+/Users/yao/Documents/网安- AI应用开发/监管上报/杭州安恒信息原创漏洞报送7个/DAS-T105995-xxx/CNNVD-xxx/poc/xxx.zip
 ```
 
 **注意**：

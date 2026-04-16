@@ -8,10 +8,7 @@
 
 **解决方案**:
 ```bash
-# 启动 Chrome 调试模式
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/chrome-debug-profile
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
 ```
 
 ### 2. WebSocket 连接超时
@@ -26,12 +23,50 @@
 **解决方案**:
 ```bash
 # 检查端口
-lsof -i :9222
+lsof -i :9332
 
-# 清理进程
-pkill -f "chrome-debug-profile"
+# 重启 skill 专用 Chrome
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+```
 
-# 重启 Chrome
+### 2.0 只想看到一个被 MCP 接管的 Chrome
+
+**现象**: 之前像是有两个 Chrome，一个自己开的，一个写着 MCP 正在控制
+
+**原因**:
+- 手工启动了一个调试 Chrome
+- `chrome-devtools-mcp` 又按默认行为自行拉起了一套 automation Chrome
+
+**解决方案**:
+```bash
+# 只使用 skill 自带启动脚本启动浏览器
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+
+# 只使用本 skill 的 wrapper 连接 MCP
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh
+```
+
+现在这套 skill 里，浏览器由 `start-chrome-debug.sh` 启动，MCP 只通过 `--browserUrl` attach 到 `9332` 端口，不会再额外拉起第二个可见实例。
+
+### 2.1 CNVD 返回 Cloudflare 521
+
+**错误信息**: `HTTP 521` 或页面提示 `Web server is down`
+
+**可能原因**:
+- 隔离的 Chrome profile 过于干净，缺少正常浏览器足迹
+- 缺少 Cloudflare 认可的 cookies，例如 `cf_clearance`
+- Cloudflare 将当前 skill 浏览器识别为异常自动化流量
+
+**解决方案**:
+```bash
+# 优先：从日常 Chrome 的 Default profile 复制一份快照到 skill profile
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+
+# 如果你平时不是 Default profile，先指定真实 profile 名称
+export CLAUDE_CHROME_PROFILE_DIRECTORY="Profile 1"
+
+# 仍然不行，再关闭普通 Chrome 后直接挂到真实 profile
+/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh live-default
 ```
 
 ### 3. 元素未找到

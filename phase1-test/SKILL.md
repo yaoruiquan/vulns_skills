@@ -1,63 +1,65 @@
 ---
 name: phase1-test
-description: 测试阶段1材料整理功能（解压 zip + 修改 docx 模板）。当用户说"测试材料整理"、"测试阶段1"、"验证材料处理"、"解压漏洞文件"、"处理 docx"、修改了 material_service.py 后验证功能时，必须使用此 skill。
+description: 测试阶段1材料整理功能（重命名文件夹 + 修改 docx 模板）。当用户说"测试材料整理"、"测试阶段1"、"验证材料处理"、"处理 docx"、修改了 material_service.py 后验证功能时，必须使用此 skill。
 ---
 
 # phase1-test
 
-测试阶段1材料整理功能，包含两个步骤：
-1. **解压 zip 文件** - 解压 CNVD/CNNVD 压缩包
-2. **修改 docx 模板** - 添加 VF 前缀后缀、填写提交人员
+测试阶段1材料整理功能：
+1. 重命名漏洞文件夹（统计漏洞数量）
+2. 修改 docx 模板（添加恒脑AI前缀后缀、填写提交人员）
 
 ## 用法
 
 ```
-/phase1-test --dir /path/to/data DAS-T105916
-/phase1-test --dir /path/to/data batch
-/phase1-test --dir /path/to/data list
+/phase1-test /path/to/漏洞批次文件夹
 ```
 
 ## 流程概览
 
-| 步骤 | 操作 | 工具 |
+| 步骤 | 操作 | 说明 |
 |------|------|------|
-| 1 | 解压 zip 文件 | scripts/unzip_vuln.py |
-| 2 | 修改 docx 模板 | scripts/test_material.py |
-| 3 | 验证结果 | 检查 docx 内容 |
+| 1 | 统计漏洞数量 | 计算文件夹内漏洞目录个数 |
+| 2 | 重命名文件夹 | 改为"杭州安恒信息原创漏洞报送N个" |
+| 3 | 修改 docx 模板 | 添加恒脑AI前缀后缀、填写提交人员 |
+| 4 | 验证结果 | 检查 docx 内容 |
 
 ---
 
-## 步骤 1: 解压 zip 文件
+## 步骤 1: 统计漏洞数量
 
-### 单个漏洞解压
+**输入文件夹**：通常是日期格式命名，如 `2026-04-13`
 
-```bash
-python /Users/yao/.claude/skills/phase1-test/scripts/unzip_vuln.py \
-  "/path/to/漏洞目录/DAS-T105917-xxx"
-```
-
-### 批量解压
+统计文件夹内以 `DAS-T` 开头的漏洞目录个数：
 
 ```bash
-python /Users/yao/.claude/skills/phase1-test/scripts/unzip_vuln.py \
-  "/path/to/漏洞批次目录"
+ls -d /path/to/日期文件夹/DAS-T* | wc -l
 ```
 
-### 预期结果
-
+**示例结构**：
 ```
-DAS-T105917-xxx/
-├── CNVD-xxx.zip           # 原始 zip
-├── CNNVD-xxx.zip          # 原始 zip
-├── CNVD-xxx/              # 解压后的目录
-│   └── xxx.docx           # 待修改的 docx
-└── CNNVD-xxx/             # 解压后的目录
-│   └ xxx.docx             # 待修改的 docx
+2026-04-13/                    ← 输入文件夹（日期命名）
+├── DAS-T105981-xxx/           ← 漏洞目录
+├── DAS-T105982-xxx/           ← 漏洞目录
+├── DAS-T105983-xxx/           ← 漏洞目录
+...                            ← N 个漏洞目录
 ```
 
 ---
 
-## 步骤 2: 修改 docx 模板
+## 步骤 2: 重命名文件夹
+
+将文件夹名改为 `杭州安恒信息原创漏洞报送N个`：
+
+```bash
+mv "/path/to/原始文件夹名" "/path/to/杭州安恒信息原创漏洞报送N个"
+```
+
+示例：7个漏洞 → `杭州安恒信息原创漏洞报送7个`
+
+---
+
+## 步骤 3: 修改 docx 模板
 
 ### 单个漏洞处理
 
@@ -84,17 +86,19 @@ python /Users/yao/.claude/skills/phase1-test/scripts/test_material.py \
 
 ---
 
-## 步骤 3: 验证结果
+## 步骤 4: 验证结果
 
 打开 docx 文件检查：
 
 | 平台 | 检查项 |
 |------|--------|
-| CNVD | 漏洞描述前缀"经VF分析：" |
-| CNVD | 提交人员已填写 |
-| CNVD | 漏洞分析有 VF 前缀后缀 |
-| CNNVD | 漏洞简介前缀"经VF分析：" |
-| CNNVD | 提交人员已填写 |
+| CNVD | 漏洞描述前缀"经恒脑AI代码审计智能体分析：" |
+| CNVD | 提交人员填写"恒脑AI代码审计智能体" |
+| CNVD | 漏洞分析有开头段落和官网链接后缀 |
+| CNVD | 漏洞验证过程已替换为标准语句 |
+| CNNVD | 漏洞简介前缀"经恒脑AI代码审计智能体分析：" |
+| CNNVD | 提交人员填写"恒脑AI代码审计智能体" |
+| CNNVD | 漏洞验证过程有开头段落和官网链接后缀 |
 
 ---
 
