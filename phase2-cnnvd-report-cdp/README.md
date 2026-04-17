@@ -268,7 +268,7 @@ python3 /Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/update_summary
 典型链路：
 
 ```text
-phase1-test / 材料整理
+phase1-material-processor / 材料整理
   -> 生成 docx 和附件
 phase2-cnvd-report-cdp
   -> 完成 CNVD 上报

@@ -1,18 +1,18 @@
 ---
-name: phase1-test
-description: 测试阶段1材料整理功能（重命名文件夹 + 修改 docx 模板）。当用户说"测试材料整理"、"测试阶段1"、"验证材料处理"、"处理 docx"、修改了 material_service.py 后验证功能时，必须使用此 skill。
+name: phase1-material-processor
+description: 监管上报前材料整理功能（重命名文件夹 + 修改 docx 模板）。当用户说"材料整理"、"监管上报准备"、"处理 docx"、修改了 material_service.py 后验证功能时，必须使用此 skill。
 ---
 
-# phase1-test
+# phase1-material-processor
 
-测试阶段1材料整理功能：
+监管上报前材料整理功能：
 1. 重命名漏洞文件夹（统计漏洞数量）
 2. 修改 docx 模板（添加恒脑AI前缀后缀、填写提交人员）
 
 ## 用法
 
 ```
-/phase1-test /path/to/漏洞批次文件夹
+/phase1-material-processor /path/to/漏洞批次文件夹
 ```
 
 ## 流程概览
@@ -64,21 +64,21 @@ mv "/path/to/原始文件夹名" "/path/to/杭州安恒信息原创漏洞报送N
 ### 单个漏洞处理
 
 ```bash
-python /Users/yao/.claude/skills/phase1-test/scripts/test_material.py \
+python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data DAS-T105916
 ```
 
 ### 批量处理
 
 ```bash
-python /Users/yao/.claude/skills/phase1-test/scripts/test_material.py \
+python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data batch
 ```
 
 ### 列出漏洞状态
 
 ```bash
-python /Users/yao/.claude/skills/phase1-test/scripts/test_material.py \
+python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data list
 ```
 

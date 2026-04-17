@@ -267,7 +267,7 @@ export CLAUDE_CHROME_PROFILE_DIRECTORY="Profile 1"
 典型链路：
 
 ```text
-phase1-test / 材料整理
+phase1-material-processor / 材料整理
   -> 生成 docx 和附件
 phase2-cnvd-report-cdp
   -> 完成 CNVD 上报

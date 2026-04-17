@@ -11,7 +11,7 @@
 # 白名单：只包含这 7 个 skills
 !cnvd-weekly-db-update/
 !msrc-vulnerability-report/
-!phase1-test/
+!phase1-material-processor/
 !phase2-cnnvd-report-cdp/
 !phase2-cnvd-report-cdp/
 !vulnerability-alert-processor/
@@ -20,7 +20,7 @@
 # 排除 skills 内部的子目录中的 .git（如果有）
 cnvd-weekly-db-update/**/.git
 msrc-vulnerability-report/**/.git
-phase1-test/**/.git
+phase1-material-processor/**/.git
 phase2-cnnvd-report-cdp/**/.git
 phase2-cnvd-report-cdp/**/.git
 vulnerability-alert-processor/**/.git
