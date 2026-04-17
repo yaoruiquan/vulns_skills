@@ -1,6 +1,6 @@
-# 漏洞预警 Skills 集合
+# 漏洞管理自动化工作流 Skills 集合
 
-Claude Code Skills 集合，用于自动化处理漏洞预警相关工作流程。
+Claude Code Skills 集合，用于自动化处理漏洞管理相关工作流程。
 
 ## 包含 Skills
 
