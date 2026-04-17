@@ -10,10 +10,12 @@ import os
 from datetime import datetime
 from openpyxl import load_workbook, Workbook
 
-
-def get_default_summary_path():
-    """获取默认汇总表路径"""
-    return "/Users/yao/Documents/网安- AI应用开发/监管上报/汇总表/漏洞汇总表.xlsx"
+# 导入配置模块
+try:
+    from config import get_summary_path
+    DEFAULT_SUMMARY_PATH = get_summary_path()
+except ImportError:
+    DEFAULT_SUMMARY_PATH = "/Users/yao/Documents/网安- AI应用开发/监管上报/汇总表/漏洞汇总表.xlsx"
 
 
 def ensure_dir(filepath):
@@ -78,7 +80,7 @@ def update_summary(
         filepath: 汇总表文件路径
     """
     if filepath is None:
-        filepath = get_default_summary_path()
+        filepath = DEFAULT_SUMMARY_PATH
 
     # 如果文件不存在，创建新文件
     if not os.path.exists(filepath):

@@ -5,15 +5,30 @@
 import sys
 import os
 import json
+from pathlib import Path
 
-# 添加项目路径
-sys.path.insert(0, '/Users/yao/LLM/vulns')
+# 加载 .env 配置
+SKILL_DIR = Path(__file__).parent.parent
+ENV_FILE = SKILL_DIR / ".env"
+
+if ENV_FILE.exists():
+    with open(ENV_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip()
+
+# Python 项目路径（可选）
+PYTHON_PROJECT_PATH = os.environ.get("PYTHON_PROJECT_PATH", "")
+if PYTHON_PROJECT_PATH and os.path.isdir(PYTHON_PROJECT_PATH):
+    sys.path.insert(0, PYTHON_PROJECT_PATH)
 
 from docx import Document
 from typing import Dict, Optional
 
-# 默认数据目录
-DEFAULT_DATA_DIR = "/Users/yao/LLM/vulns/date"
+# 数据目录（从环境变量读取，或使用默认值）
+DEFAULT_DATA_DIR = os.environ.get("VULN_DATA_DIR", os.path.expanduser("~/vulns/date"))
 
 
 def find_docx_path(das_id: str, platform: str, data_dir: str = DEFAULT_DATA_DIR) -> Optional[str]:

@@ -6,14 +6,15 @@ import sys
 import os
 import json
 
-# 添加项目路径
-sys.path.insert(0, '/Users/yao/LLM/vulns')
-
 from docx import Document
 from typing import Dict, Optional
 
-# 默认数据目录
-DEFAULT_DATA_DIR = "/Users/yao/LLM/vulns/date"
+# 导入配置模块
+try:
+    from config import get_data_dir
+    DEFAULT_DATA_DIR = get_data_dir()
+except ImportError:
+    DEFAULT_DATA_DIR = "/Users/yao/LLM/vulns/date"
 
 
 def find_docx_path(das_id: str, platform: str, data_dir: str = DEFAULT_DATA_DIR) -> Optional[str]:

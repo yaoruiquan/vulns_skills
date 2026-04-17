@@ -26,7 +26,27 @@ npm install -g chrome-devtools-mcp@latest
 pip install websocket-client python-docx openpyxl ddddocr
 ```
 
-### 2. 确认项目级 MCP 配置
+### 2. 配置环境变量
+
+复制 `.env.example` 为 `.env` 并修改配置：
+
+```bash
+cp .env.example .env
+```
+
+关键配置项：
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `VULN_DATA_DIR` | 漏洞数据目录（包含 DAS-T* 文件夹的父目录） | `/path/to/vulns/date` |
+| `PYTHON_PROJECT_PATH` | Python 项目路径（可选，用于导入共享模块） | `/path/to/python/project` |
+| `CLAUDE_CHROME_MCP_PORT` | Chrome 调试端口（默认 9332） | `9332` |
+| `CNVD_EMAIL` | CNVD 登录邮箱（可选，建议用 profile 种子模式） | `your@email.com` |
+| `CNVD_PASSWORD` | CNVD 登录密码（可选，有安全风险） | `your_password` |
+
+> **安全提示**：密码明文存储有风险，推荐使用 `seed-default` 模式从 Chrome profile 复制登录状态。
+
+### 3. 确认项目级 MCP 配置
 
 当前目录自带：
 
@@ -274,6 +294,44 @@ phase2-cnvd-report-cdp
 phase2-cnnvd-report-cdp
   -> 可继续做 CNNVD 上报
 ```
+
+## 复用此 Skill
+
+如需将此 skill 复制给其他用户或创建类似的上报 skill，需修改以下内容：
+
+### 必须修改的文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `.mcp.json` | 更新 wrapper 脚本路径为新 skill 目录 |
+| `.env` | 设置 `VULN_DATA_DIR` 为新用户的数据目录 |
+| `scripts/extract_vuln_data.py` | 已改为从 `.env` 读取，无需额外修改 |
+
+### 端口与 Profile 避免冲突
+
+如果同时运行多个上报 skill（如 CNVD + CNNVD），需分配不同配置：
+
+| Skill | 端口 | Profile 名 |
+|-------|------|-----------|
+| CNVD | 9332 | cnvd-report |
+| CNNVD | 9333 | cnnvd-report |
+
+修改方式：在 `.env` 中设置 `CLAUDE_CHROME_MCP_PORT=9333`，或在 wrapper 脚本中修改。
+
+### 共享依赖（无需修改）
+
+以下组件可复用，无需复制：
+
+- `~/.claude/skills/shared-chrome-devtools/start-profile.sh`
+- `~/.claude/skills/shared-chrome-devtools/mcp-wrapper.sh`
+
+### 快速复用步骤
+
+1. 复制整个 skill 目录
+2. 编辑 `.mcp.json` 更新路径
+3. 创建 `.env` 配置数据目录
+4. 如需不同端口，修改端口配置
+5. 启动 Chrome 并测试
 
 ## 参考文档
 
