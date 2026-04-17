@@ -12,8 +12,8 @@
 !cnvd-weekly-db-update/
 !msrc-vulnerability-report/
 !phase1-material-processor/
-!phase2-cnnvd-report-cdp/
-!phase2-cnvd-report-cdp/
+!phase2-cnnvd-report/
+!phase2-cnvd-report/
 !vulnerability-alert-processor/
 !wechat-mp-publisher/
 
@@ -21,11 +21,14 @@
 cnvd-weekly-db-update/**/.git
 msrc-vulnerability-report/**/.git
 phase1-material-processor/**/.git
-phase2-cnnvd-report-cdp/**/.git
-phase2-cnvd-report-cdp/**/.git
+phase2-cnnvd-report/**/.git
+phase2-cnvd-report/**/.git
 vulnerability-alert-processor/**/.git
 wechat-mp-publisher/**/.git
 
 # 排除 .DS_Store
 .DS_Store
 **/.DS_Store
+# Environment files with secrets
+.env
+**/.env

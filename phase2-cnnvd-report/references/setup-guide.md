@@ -28,7 +28,7 @@ pip install websocket-client python-docx openpyxl
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
@@ -40,7 +40,7 @@ pip install websocket-client python-docx openpyxl
 ### 3.1 默认启动（隔离 profile）
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh
 ```
 
 该 skill 的固定隔离配置：
@@ -54,7 +54,7 @@ pip install websocket-client python-docx openpyxl
 如果站点保护页、登录态或浏览器足迹有问题，优先改用：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 ### 3.3 启动模式说明

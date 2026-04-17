@@ -1,4 +1,4 @@
-# phase2-cnvd-report-cdp
+# phase2-cnvd-report
 
 通过 Chrome DevTools MCP 控制真实浏览器完成 CNVD 漏洞上报。
 
@@ -10,7 +10,7 @@
 
 ## 这个 skill 做什么
 
-`phase2-cnvd-report-cdp` 负责把已经整理好的漏洞材料提交到 CNVD 平台。典型流程包括：
+`phase2-cnvd-report` 负责把已经整理好的漏洞材料提交到 CNVD 平台。典型流程包括：
 
 - 从本地 `docx` 材料提取字段。
 - 准备待上传的附件压缩包。
@@ -59,7 +59,7 @@ cp .env.example .env
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
@@ -75,13 +75,13 @@ cp .env.example .env
 ### 3. 启动当前 skill 专用浏览器
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 如果 CNVD 打开后直接落到 Cloudflare 521，优先改用：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 可选启动模式：
@@ -148,7 +148,7 @@ curl -s http://127.0.0.1:9332/json/version
 ## 目录结构
 
 ```text
-phase2-cnvd-report-cdp/
+phase2-cnvd-report/
 ├── SKILL.md
 ├── README.md
 ├── .mcp.json
@@ -172,19 +172,19 @@ phase2-cnvd-report-cdp/
 ### 提取漏洞数据
 
 ```bash
-python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
+python3 /Users/yao/.claude/skills/phase2-cnvd-report/scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
 ```
 
 ### 压缩附件目录
 
 ```bash
-python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/compress_zip.py "/path/to/CNVD-folder"
+python3 /Users/yao/.claude/skills/phase2-cnvd-report/scripts/compress_zip.py "/path/to/CNVD-folder"
 ```
 
 ### OCR 识别验证码
 
 ```bash
-python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/captcha_ocr.py /tmp/captcha.png
+python3 /Users/yao/.claude/skills/phase2-cnvd-report/scripts/captcha_ocr.py /tmp/captcha.png
 ```
 
 ## 推荐工作流
@@ -231,13 +231,13 @@ python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/captcha_ocr.py 
 重新执行：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 如果你要复用日常 profile，也可以明确指定模式：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 ### Claude 连到了错误的浏览器
@@ -265,13 +265,13 @@ python3 /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/captcha_ocr.py 
 1. 用真实 Chrome 足迹启动：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 2. 如果还不行，彻底退出普通 Chrome 后再试：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh live-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh live-default
 ```
 
 3. 如果你本机默认不是 `Default` profile，可以先设置：
@@ -289,7 +289,7 @@ export CLAUDE_CHROME_PROFILE_DIRECTORY="Profile 1"
 ```text
 phase1-material-processor / 材料整理
   -> 生成 docx 和附件
-phase2-cnvd-report-cdp
+phase2-cnvd-report
   -> 完成 CNVD 上报
 phase2-cnnvd-report-cdp
   -> 可继续做 CNNVD 上报

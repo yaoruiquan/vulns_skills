@@ -1,4 +1,4 @@
-# phase2-cnnvd-report-cdp
+# phase2-cnnvd-report
 
 通过 Chrome DevTools MCP 控制真实浏览器完成 CNNVD 漏洞上报。
 
@@ -6,7 +6,7 @@
 
 ## 这个 skill 做什么
 
-`phase2-cnnvd-report-cdp` 用于将已经整理好的漏洞材料提交到 CNNVD 平台。常见操作包括：
+`phase2-cnnvd-report` 用于将已经整理好的漏洞材料提交到 CNNVD 平台。常见操作包括：
 
 - 从本地 `docx` 材料中提取字段
 - 打开 CNNVD 页面并导航到报送入口
@@ -71,7 +71,7 @@ curl -s http://127.0.1:9333/json/version
 ## 目录结构
 
 ```text
-phase2-cnnvd-report-cdp/
+phase2-cnnvd-report/
 ├── SKILL.md                    # 精简的操作指南
 ├── README.md                   # 本文件
 ├── .env.template               # 配置模板（首次使用必填）
@@ -104,7 +104,7 @@ phase2-cnnvd-report-cdp/
 
 1. **复制整个 skill 目录**
    ```bash
-   cp -r ~/.claude/skills/phase2-cnnvd-report-cdp ~/.claude/skills/your-team-cnnvd-report
+   cp -r ~/.claude/skills/phase2-cnnvd-report ~/.claude/skills/your-team-cnnvd-report
    ```
 
 2. **重命名 profile 防止冲突**
@@ -193,7 +193,7 @@ phase1-material-processor / 材料整理
   -> 生成 docx 和附件
 phase2-cnvd-report-cdp
   -> 完成 CNVD 上报
-phase2-cnnvd-report-cdp
+phase2-cnnvd-report
   -> 完成 CNNVD 上报
 ```
 

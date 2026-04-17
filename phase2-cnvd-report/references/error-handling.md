@@ -8,7 +8,7 @@
 
 **解决方案**:
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 ### 2. WebSocket 连接超时
@@ -26,7 +26,7 @@
 lsof -i :9332
 
 # 重启 skill 专用 Chrome
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 ### 2.0 只想看到一个被 MCP 接管的 Chrome
@@ -40,10 +40,10 @@ lsof -i :9332
 **解决方案**:
 ```bash
 # 只使用 skill 自带启动脚本启动浏览器
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 
 # 只使用本 skill 的 wrapper 连接 MCP
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 现在这套 skill 里，浏览器由 `start-chrome-debug.sh` 启动，MCP 只通过 `--browserUrl` attach 到 `9332` 端口，不会再额外拉起第二个可见实例。
@@ -60,13 +60,13 @@ lsof -i :9332
 **解决方案**:
 ```bash
 # 优先：从日常 Chrome 的 Default profile 复制一份快照到 skill profile
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
 
 # 如果你平时不是 Default profile，先指定真实 profile 名称
 export CLAUDE_CHROME_PROFILE_DIRECTORY="Profile 1"
 
 # 仍然不行，再关闭普通 Chrome 后直接挂到真实 profile
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh live-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh live-default
 ```
 
 ### 3. 元素未找到

@@ -1,4 +1,4 @@
-# phase2-cnnvd-report-cdp
+# phase2-cnnvd-report
 
 通过 chrome-devtools MCP 控制浏览器完成 CNNVD 漏洞上报。
 
@@ -32,7 +32,7 @@ Step 0: 检查环境 → Step 1: 准备数据 → Step 2: 导航登录 → Step 
 #### 1.1 提取漏洞数据
 
 ```bash
-python3 ~/.claude/skills/phase2-cnnvd-report-cdp/scripts/extract_vuln_data.py <DAS-ID> --platform CNNVD
+python3 ~/.claude/skills/phase2-cnnvd-report/scripts/extract_vuln_data.py <DAS-ID> --platform CNNVD
 ```
 
 > 数据字段映射参见 [references/data-fields.md](references/data-fields.md)
@@ -71,7 +71,7 @@ MCP: take_screenshot
   filePath: "/tmp/cnnvd_captcha.png"
 
 # 3. OCR 识别
-python3 ~/.claude/skills/phase2-cnnvd-report-cdp/scripts/captcha_ocr.py /tmp/cnnvd_captcha.png
+python3 ~/.claude/skills/phase2-cnnvd-report/scripts/captcha_ocr.py /tmp/cnnvd_captcha.png
 
 # 4. 填入验证码
 MCP: type_text
@@ -218,7 +218,7 @@ MCP: click
 ## 四、文件结构
 
 ```
-phase2-cnnvd-report-cdp/
+phase2-cnnvd-report/
 ├── SKILL.md                  # 本文件
 ├── README.md                 # 详细说明
 ├── scripts/

@@ -12,7 +12,7 @@
                                                     │
                                            ┌────────▼────────┐
                                            │  Chrome Browser │
-                                           │  (调试端口 9332) │
+                                           │  (调试端口 9333) │
                                            └─────────────────┘
 ```
 
@@ -53,25 +53,25 @@ chrome-devtools MCP：
 3. MCP 只是发送命令控制浏览器，**不是自动化浏览器**
 4. CNVD 防火墙看到的是**正常用户行为**
 
-**补充：Cloudflare 521 的根因通常不是 MCP，而是浏览器 profile 太“干净”**
-
-如果你给 skill 启动了一个全新的隔离 profile，Cloudflare 可能会把它判成异常浏览器。CNVD 场景优先建议：
-
-```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
-```
-
-这样会保留调试端口隔离，同时把你真实 Chrome 的 cookies、历史和本地状态快照到 skill profile 里。
-
 **补充：现在的 skill 默认只会有一个可见 Chrome 实例**
 
 当前实现里，浏览器和 MCP 的职责已经拆开：
 
 - `scripts/start-chrome-debug.sh` 只负责启动 skill 专用 Chrome
-- `scripts/chrome-devtools-mcp-wrapper.sh` 只负责让 `chrome-devtools-mcp` 连接到 `http://127.0.0.1:9332`
+- `scripts/chrome-devtools-mcp-wrapper.sh` 只负责让 `chrome-devtools-mcp` 连接到 `http://127.0.0.1:9333`
 - `chrome-devtools-mcp` 通过 `--browserUrl` attach 到现有浏览器，不再自己拉起第二个可见 Chrome
 
 如果你以前见过两个实例，通常是因为“手工开的调试浏览器”和“MCP 默认拉起的 automation 浏览器”同时存在。现在 skill 本地 wrapper 已经把这个问题收敛掉了。
+
+**补充：站点保护页、登录态或浏览器足迹问题，优先不是换协议，而是复用真实 Chrome profile**
+
+如果你给 skill 启动了一个全新的隔离 profile，某些站点可能会把它判成异常浏览器。这类场景优先建议：
+
+```bash
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh seed-default
+```
+
+这样会保留调试端口隔离，同时把你真实 Chrome 的 cookies、历史和本地状态快照到 skill profile 里。
 
 ## 连接失败问题与解决方案
 
@@ -91,11 +91,11 @@ Google collects usage statistics...
 
 ```bash
 #!/bin/bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 ```bash
-chmod +x /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh
+chmod +x /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 **Step 2: 配置 settings.json**
@@ -104,7 +104,7 @@ chmod +x /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtool
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
@@ -127,30 +127,30 @@ npm install -g chrome-devtools-mcp@latest
 **Step 2: 启动 skill 专用 Chrome**
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh
 ```
 
-如果站点前面有 Cloudflare，改用：
+如果你需要复用真实 Chrome 足迹，改用：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 **Step 3: 确认 wrapper 脚本路径**
 
 ```bash
-ls -l /Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh
+ls -l /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 **Step 4: 配置项目级 settings.json**
 
-文件路径：`/Users/yao/.claude/skills/phase2-cnvd-report-cdp/.claude/settings.json`
+文件路径：`/Users/yao/.claude/skills/phase2-cnnvd-report/.claude/settings.json`
 
 ```json
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
@@ -210,7 +210,7 @@ MCP: click
 
 A: 检查以下几点：
 1. wrapper 脚本是否有执行权限 (`chmod +x`)
-2. Chrome 是否已通过 `scripts/start-chrome-debug.sh` 启动，并监听 `9332`
+2. Chrome 是否已通过 `scripts/start-chrome-debug.sh` 启动，并监听 `9333`
 3. 运行 `/mcp` 重新加载 MCP 连接
 4. 检查 settings.json 配置是否正确
 
@@ -221,17 +221,10 @@ A: 确保：
 2. 目标页面已完全加载
 3. 使用正确的 uid（从 `take_snapshot` 获取）
 
-**Q: 调试端口正常，但打开 CNVD 是 Cloudflare 521？**
-
-A: 这通常是 Cloudflare 拒绝了“全新 profile”的浏览器指纹。按顺序尝试：
-1. `scripts/start-chrome-debug.sh seed-default`
-2. 如果默认不是 `Default` profile，先设置 `CLAUDE_CHROME_PROFILE_DIRECTORY`
-3. 仍不行再关闭日常 Chrome，使用 `scripts/start-chrome-debug.sh live-default`
-
 **Q: 配置了 .mcp.json 但不生效？**
 
 A: `.claude/settings.json` 的 `mcpServers` 会覆盖 `.mcp.json`，确保两个文件配置一致。
 
 **Q: 为什么现在没有第二个写着“被 MCP 控制”的 Chrome？**
 
-A: 因为 wrapper 现在显式使用了 `--browserUrl`，MCP 只 attach 到 `9332` 端口对应的已有 Chrome，不再自行 launch 第二个可见浏览器。
+A: 因为 wrapper 现在显式使用了 `--browserUrl`，MCP 只 attach 到 `9333` 端口对应的已有 Chrome，不再自行 launch 第二个可见浏览器。

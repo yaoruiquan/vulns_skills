@@ -14,7 +14,7 @@ npm install -g chrome-devtools-mcp@latest
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
+      "command": "/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
   }
@@ -24,7 +24,7 @@ npm install -g chrome-devtools-mcp@latest
 ## 3. 启动 Chrome（调试端口）
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 该 skill 的固定隔离配置：

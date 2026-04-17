@@ -25,13 +25,13 @@
 ### 1. 启动 Chrome
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
 ```
 
 **如果 CNVD 返回 Cloudflare 521**：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report-cdp/scripts/start-chrome-debug.sh seed-default
+/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
 ```
 
 ### 2. 检查环境

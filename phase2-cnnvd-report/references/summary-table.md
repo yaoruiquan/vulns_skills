@@ -19,7 +19,7 @@
 ## 三、更新脚本
 
 ```bash
-python3 ~/.claude/skills/phase2-cnnvd-report-cdp/scripts/update_summary.py \
+python3 ~/.claude/skills/phase2-cnnvd-report/scripts/update_summary.py \
   --title "<漏洞标题>" \
   --vendor "<影响厂商>" \
   --das-id "<DAS-ID>" \
