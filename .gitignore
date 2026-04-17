@@ -6,6 +6,7 @@
 # 保留 .git 目录
 !.git
 !.gitignore
+!README.md
 
 # 白名单：只包含这 7 个 skills
 !cnvd-weekly-db-update/
