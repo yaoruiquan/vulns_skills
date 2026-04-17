@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "chrome-devtools": {
-      "command": "/Users/yao/.claude/skills/phase2-cnnvd-report-cdp/scripts/chrome-devtools-mcp-wrapper.sh",
-      "args": []
-    }
-  }
-}
