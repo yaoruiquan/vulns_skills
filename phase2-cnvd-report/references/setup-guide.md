@@ -8,7 +8,14 @@ npm install -g chrome-devtools-mcp@latest
 
 ## 2. 配置 MCP
 
-在当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 中配置：
+首次使用先在 skill 目录运行初始化脚本：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnvd-report
+./scripts/setup.sh
+```
+
+初始化脚本会生成当前 skill 路径的 `./.mcp.json`：
 
 ```json
 {
@@ -24,7 +31,8 @@ npm install -g chrome-devtools-mcp@latest
 ## 3. 启动 Chrome（调试端口）
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
+cd /Users/yao/.claude/skills/phase2-cnvd-report
+./scripts/start-chrome-debug.sh
 ```
 
 该 skill 的固定隔离配置：
@@ -38,8 +46,8 @@ npm install -g chrome-devtools-mcp@latest
 | 模式 | 命令 | 说明 |
 |------|------|------|
 | `isolated` | 默认 | 纯隔离 profile |
-| `seed-default` | `start-chrome-debug.sh seed-default` | 复制日常 Chrome Default profile 到 skill profile |
-| `live-default` | `start-chrome-debug.sh live-default` | 直接使用日常 Chrome 用户数据目录 |
+| `seed-default` | `./scripts/start-chrome-debug.sh seed-default` | 复制日常 Chrome Default profile 到 skill profile |
+| `live-default` | `./scripts/start-chrome-debug.sh live-default` | 直接使用日常 Chrome 用户数据目录 |
 
 **如果 CNVD 返回 Cloudflare 521**，优先改用 `seed-default` 模式。
 
@@ -55,4 +63,4 @@ npm install -g chrome-devtools-mcp@latest
 
 ---
 
-> MCP 连接原理、错误处理详见 [references/mcp-connection.md](references/mcp-connection.md) 和 [references/error-handling.md](references/error-handling.md)
+> MCP 连接原理和常见错误处理详见 [mcp-connection.md](mcp-connection.md)。

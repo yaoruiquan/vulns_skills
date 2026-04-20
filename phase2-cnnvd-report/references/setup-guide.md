@@ -22,7 +22,14 @@ pip install websocket-client python-docx openpyxl
 
 ## 二、配置 MCP
 
-在当前 skill 目录的 `./.mcp.json` 或 `./.claude/settings.json` 中配置：
+首次使用先在 skill 目录运行初始化脚本：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnnvd-report
+./scripts/setup.sh
+```
+
+初始化脚本会生成当前 skill 路径的 `./.mcp.json`：
 
 ```json
 {
@@ -40,7 +47,8 @@ pip install websocket-client python-docx openpyxl
 ### 3.1 默认启动（隔离 profile）
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh
+cd /Users/yao/.claude/skills/phase2-cnnvd-report
+./scripts/start-chrome-debug.sh
 ```
 
 该 skill 的固定隔离配置：
@@ -54,7 +62,7 @@ pip install websocket-client python-docx openpyxl
 如果站点保护页、登录态或浏览器足迹有问题，优先改用：
 
 ```bash
-/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/start-chrome-debug.sh seed-default
+./scripts/start-chrome-debug.sh seed-default
 ```
 
 ### 3.3 启动模式说明

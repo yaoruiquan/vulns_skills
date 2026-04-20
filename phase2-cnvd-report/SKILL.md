@@ -1,72 +1,94 @@
-# phase2-cnvd-report-MCP
+# phase2-cnvd-report
 
-通过 chrome-devtools MCP 控制浏览器完成 CNVD 漏洞上报。
-
-> MCP 工具详细说明参见 [references/mcp-tools.md](references/mcp-tools.md)
+通过 Chrome DevTools MCP 控制真实浏览器完成 CNVD 漏洞上报。
 
 ---
 
-## 流程概览
+## 环境配置
+
+### 1. 初始化
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnvd-report
+./scripts/setup.sh
+vim .env
+```
+
+`setup.sh` 会创建 `.env`、生成当前路径的 `.mcp.json`，并设置脚本可执行权限。已有 `.env` 不会被覆盖。
+
+### 2. 必填配置
+
+| 环境变量 | 说明 | 默认/示例 |
+|----------|------|-----------|
+| `VULN_DATA_DIR` | 漏洞数据根目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
+| `PYTHON_PROJECT_PATH` | Python 项目路径，可选，用于导入共享模块 | `/path/to/your/python/project` |
+| `CNVD_EMAIL` | CNVD 登录邮箱，可选 | 空 |
+| `CNVD_PASSWORD` | CNVD 登录密码，可选 | 空 |
+| `CHROME_DEBUG_PORT` | 本 skill 专用 Chrome 调试端口 | `9332` |
+| `CHROME_PROFILE_NAME` | 本 skill 专用 Chrome profile | `cnvd-report` |
+
+兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
+
+### 3. 浏览器配置
+
+本 skill 默认使用：
+
+- 调试端口：`9332`
+- Chrome profile：`cnvd-report`
+- 启动脚本：`scripts/start-chrome-debug.sh`
+
+```bash
+./scripts/start-chrome-debug.sh
+curl -s http://127.0.0.1:9332/json/version
+```
+
+可选模式：
+
+- `isolated`：独立空 profile，默认模式。
+- `seed-default`：复制日常 Chrome profile 快照，适合绕过 CNVD 登录态或 Cloudflare 干扰。
+- `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
+
+### 4. MCP 配置
+
+如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `chrome-devtools`。
+
+如果从其他项目目录启动 Claude Code，在那个项目目录注册本 skill 的 wrapper：
+
+```bash
+claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
+```
+
+如果这个 skill 需要和其他浏览器 MCP 在同一个 Claude 项目里同时加载，给本 skill 使用唯一名称注册：
+
+```bash
+claude mcp add cnvd-chrome -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
+```
+
+本 skill 的端口/profile 独立于其他 skill；只有同一个 Claude 项目里同时注册多个 MCP server 时，server 名才需要唯一。
+
+### 5. 验证
+
+```bash
+curl -s http://127.0.0.1:9332/json/version
+claude mcp get chrome-devtools
+# 如果同项目并发时注册了唯一名称，则改查：
+# claude mcp get cnvd-chrome
+```
+
+---
+
+## 工作流程
 
 | 步骤 | 操作 | 说明 |
 |------|------|------|
-| 0 | 检查环境 | 确认 Chrome 调试端口和 MCP 连接 |
-| 1 | 准备数据 | 提取漏洞数据、压缩附件 |
-| 2 | 导航表单 | 打开 CNVD、登录、进入上报表单 |
-| 3 | 填写表单 | 切换表单类型、填写厂商和漏洞信息 |
-| 4 | 上传附件 | 上传 zip 文件 |
-| 4.5 | 验证完整性 | 检查所有字段已填写 |
-| 5 | 验证码提交 | OCR 识别验证码并提交 |
+| 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
+| 1 | 准备数据 | 用 `extract_vuln_data.py` 从本地 docx 提取 CNVD 字段 |
+| 2 | 导航表单 | 打开 CNVD、登录、进入漏洞上报表单 |
+| 3 | 填写表单 | 切换通用型漏洞表单，填写厂商、产品、版本和漏洞详情 |
+| 4 | 上传附件 | 上传按 CNVD 要求准备的 zip 附件 |
+| 5 | 验证提交 | OCR 识别验证码，提交并记录返回结果 |
 
----
-
-## 快速开始
-
-### 1. 启动 Chrome
-
-```bash
-/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh
-```
-
-**如果 CNVD 返回 Cloudflare 521**：
-
-```bash
-/Users/yao/.claude/skills/phase2-cnvd-report/scripts/start-chrome-debug.sh seed-default
-```
-
-### 2. 检查环境
-
-```bash
-curl -s http://localhost:9332/json/version
-```
-
-```
-MCP: list_pages
-```
-
-### 3. 提取数据
-
-```bash
-python scripts/extract_vuln_data.py <DAS-ID> --platform CNVD --data-dir "<数据目录>"
-```
-
-### 4. 填表提交流程
-
-详见 [references/workflow.md](references/workflow.md)
-
----
-
-## 详细文档
-
-| 文档 | 内容 |
-|------|------|
-| [setup-guide.md](references/setup-guide.md) | 前提条件、MCP 配置、环境检查 |
-| [workflow.md](references/workflow.md) | 详细步骤（导航、填表、上传、提交） |
-| [field-mapping.md](references/field-mapping.md) | 字段映射表、漏洞类型、影响对象类型 |
-| [captcha-ocr.md](references/captcha-ocr.md) | 验证码 OCR 自动识别 |
-| [selectors.md](references/selectors.md) | CNVD 表单 CSS 选择器参考 |
-| [mcp-connection.md](references/mcp-connection.md) | MCP 连接原理与经验 |
-| [error-handling.md](references/error-handling.md) | 错误处理指南 |
+详细步骤见 `references/workflow.md`。
 
 ---
 
@@ -74,14 +96,31 @@ python scripts/extract_vuln_data.py <DAS-ID> --platform CNVD --data-dir "<数据
 
 | 脚本 | 用途 |
 |------|------|
-| `scripts/start-chrome-debug.sh` | 启动 skill 专用 Chrome（端口 9332） |
-| `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper（连接到 9332） |
-| `scripts/extract_vuln_data.py` | 提取漏洞数据 |
-| `scripts/captcha_ocr.py` | 验证码 OCR 识别 |
+| `scripts/setup.sh` | 初始化 `.env`、`.mcp.json` 和脚本权限 |
+| `scripts/start-chrome-debug.sh` | 启动本 skill 专用 Chrome |
+| `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
+| `scripts/extract_vuln_data.py` | 从 docx 提取 CNVD/CNNVD 上报字段 |
+| `scripts/captcha_ocr.py` | 验证码 OCR |
 
 ---
 
-## 相关链接
+## 参考资料
 
-- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)
-- [CNVD 官网](https://www.cnvd.org.cn/)
+- `references/setup-guide.md`：环境与依赖说明
+- `references/workflow.md`：CNVD 上报步骤
+- `references/field-mapping.md`：字段映射
+- `references/selectors.md`：CNVD 表单选择器参考
+- `references/captcha-ocr.md`：验证码 OCR
+- `references/mcp-connection.md`：MCP 连接经验
+- `references/mcp-tools.md`：MCP 工具参考
+- `references/original-SKILL.md`：本次规范化前的原始 `SKILL.md`
+- `references/original-README.md`：本次规范化前的原始 `README.md`
+
+---
+
+## 注意事项
+
+- CNVD 密码明文存储有风险，不要复制或分享 `.env`。
+- 优先使用 `seed-default` 复用登录态；`live-default` 只在必要时使用。
+- 当前 skill 不包含独立的 `compress_zip.py`，附件压缩需按 CNVD 页面要求另行准备。
+- 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。

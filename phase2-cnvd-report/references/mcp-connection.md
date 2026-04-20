@@ -98,7 +98,7 @@ Google collects usage statistics...
 chmod +x /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-**Step 2: 配置 settings.json**
+**Step 2: 配置 `.mcp.json`**
 
 ```json
 {
@@ -112,9 +112,9 @@ chmod +x /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mc
 ```
 
 **关键点**：
-- `2>/dev/null` 将 stderr 警告重定向到空设备
-- 只保留 stdout 用于 MCP 协议通信
-- 不要用 `grep -v` 过滤，会破坏管道
+- wrapper 通过 `--browserUrl` 连接到本 skill 专用 Chrome
+- 由 `CHROME_DEBUG_PORT` 决定连接端口，默认 `9332`
+- 不要用 `grep -v` 过滤 MCP 输出，会破坏协议管道
 
 ## 完整配置步骤
 
@@ -142,9 +142,9 @@ npm install -g chrome-devtools-mcp@latest
 ls -l /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-**Step 4: 配置项目级 settings.json**
+**Step 4: 确认项目级 `.mcp.json`**
 
-文件路径：`/Users/yao/.claude/skills/phase2-cnvd-report/.claude/settings.json`
+文件路径：`/Users/yao/.claude/skills/phase2-cnvd-report/.mcp.json`
 
 ```json
 {
@@ -212,7 +212,7 @@ A: 检查以下几点：
 1. wrapper 脚本是否有执行权限 (`chmod +x`)
 2. Chrome 是否已通过 `scripts/start-chrome-debug.sh` 启动，并监听 `9332`
 3. 运行 `/mcp` 重新加载 MCP 连接
-4. 检查 settings.json 配置是否正确
+4. 检查 `.mcp.json` 或 `claude mcp get chrome-devtools` 的 wrapper 路径是否正确
 
 **Q: 连接成功但无法操作页面？**
 
@@ -230,7 +230,7 @@ A: 这通常是 Cloudflare 拒绝了“全新 profile”的浏览器指纹。按
 
 **Q: 配置了 .mcp.json 但不生效？**
 
-A: `.claude/settings.json` 的 `mcpServers` 会覆盖 `.mcp.json`，确保两个文件配置一致。
+A: 确认 Claude Code 是从本 skill 目录启动的；如果不是，请在实际项目目录运行 `claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh`。
 
 **Q: 为什么现在没有第二个写着“被 MCP 控制”的 Chrome？**
 

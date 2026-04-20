@@ -1,5 +1,40 @@
 #!/bin/bash
 set -euo pipefail
 
-export CLAUDE_CHROME_MCP_PORT="${CLAUDE_CHROME_MCP_PORT:-9332}"
-exec /Users/yao/.claude/skills/shared-chrome-devtools/mcp-wrapper.sh "$@"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ROOT="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="${SKILL_ROOT}/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    export "$key"="$value"
+  done < "$ENV_FILE"
+fi
+
+PORT="${CHROME_DEBUG_PORT:-${CLAUDE_CHROME_MCP_PORT:-9332}}"
+MCP_BIN="${CHROME_DEVTOOLS_MCP_BIN:-/opt/homebrew/bin/chrome-devtools-mcp}"
+
+if [[ ! -x "$MCP_BIN" ]]; then
+  if ! MCP_BIN="$(command -v chrome-devtools-mcp 2>/dev/null)"; then
+    MCP_BIN=""
+  fi
+fi
+
+if [[ -z "${MCP_BIN:-}" || ! -x "$MCP_BIN" ]]; then
+  echo "chrome-devtools-mcp not found. Install it with: npm install -g chrome-devtools-mcp@latest" >&2
+  exit 1
+fi
+
+exec "$MCP_BIN" \
+  --browserUrl "http://127.0.0.1:${PORT}" \
+  --no-usage-statistics \
+  --no-performance-crux \
+  "$@"
