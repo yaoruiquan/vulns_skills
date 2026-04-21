@@ -35,6 +35,7 @@ EOF
 
 chmod +x "${SKILL_ROOT}/scripts/start-chrome-debug.sh"
 chmod +x "${SKILL_ROOT}/scripts/chrome-devtools-mcp-wrapper.sh"
+chmod +x "${SKILL_ROOT}/scripts/dingtalk_notify.py"
 
 echo "Wrote MCP config: ${MCP_FILE}"
 echo "Next:"

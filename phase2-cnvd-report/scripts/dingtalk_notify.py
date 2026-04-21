@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""将 skill 生成结果推送到钉钉自定义机器人。"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+
+STATUS_ICON = {
+    "success": "[成功]",
+    "failed": "[失败]",
+    "running": "[执行中]",
+    "info": "[信息]",
+}
+
+
+def load_env(skill_root: Path) -> None:
+    """加载 skill 根目录下的 .env，不覆盖已存在环境变量。"""
+    env_file = skill_root / ".env"
+    if not env_file.exists():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def enabled() -> bool:
+    """判断是否启用钉钉通知。"""
+    value = os.environ.get("DINGTALK_ENABLED", "true").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def signed_webhook(webhook: str, secret: str | None) -> str:
+    """按钉钉加签规则为 webhook 追加 timestamp 和 sign。"""
+    if not secret:
+        return webhook
+    timestamp = str(round(time.time() * 1000))
+    string_to_sign = f"{timestamp}\n{secret}".encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), string_to_sign, hashlib.sha256).digest()
+    sign = urllib.parse.quote_plus(base64.b64encode(digest))
+    separator = "&" if "?" in webhook else "?"
+    return f"{webhook}{separator}timestamp={timestamp}&sign={sign}"
+
+
+def normalize_cli_text(value: str) -> str:
+    """把命令行传入的字面量 \\n 转成真实换行。"""
+    return (value or "").replace("\\n", "\n")
+
+
+def build_markdown(args: argparse.Namespace) -> str:
+    """组装钉钉 Markdown 消息正文。"""
+    icon = STATUS_ICON.get(args.status, STATUS_ICON["info"])
+    lines = [
+        f"### {icon} {args.title}",
+        "",
+        f"- Skill：`{args.skill}`",
+        f"- 状态：`{args.status}`",
+    ]
+
+    text = normalize_cli_text(args.text)
+    if text:
+        lines.extend(["", text.strip()])
+
+    if args.output:
+        lines.extend(["", f"- 输出目录：`{args.output}`"])
+
+    for file_path in args.file or []:
+        lines.append(f"- 输出文件：`{file_path}`")
+
+    return "\n".join(lines)
+
+
+def send_markdown(webhook: str, title: str, text: str, at_all: bool = False, at_mobiles: list[str] | None = None) -> dict:
+    """发送 Markdown 类型的钉钉机器人消息。"""
+    payload = {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": title,
+            "text": text,
+        },
+        "at": {
+            "isAtAll": at_all,
+            "atMobiles": at_mobiles or [],
+        },
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        webhook,
+        data=data,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8")
+    return json.loads(body)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="推送 skill 生成结果到钉钉机器人")
+    parser.add_argument("--title", required=True, help="消息标题")
+    parser.add_argument("--skill", default="phase2-cnvd-report", help="skill 名称")
+    parser.add_argument("--status", choices=["success", "failed", "running", "info"], default="success", help="任务状态")
+    parser.add_argument("--text", default="", help="消息正文补充说明")
+    parser.add_argument("--output", default="", help="输出目录")
+    parser.add_argument("--file", action="append", help="输出文件路径，可重复传入")
+    parser.add_argument("--webhook", default="", help="钉钉 webhook；默认读取 DINGTALK_WEBHOOK")
+    parser.add_argument("--secret", default="", help="钉钉加签密钥；默认读取 DINGTALK_SECRET")
+    parser.add_argument("--at-all", action="store_true", help="是否 @所有人")
+    parser.add_argument("--at", action="append", default=[], help="需要 @ 的手机号，可重复传入")
+    parser.add_argument("--required", action="store_true", help="未配置 webhook 时返回失败")
+    args = parser.parse_args()
+
+    skill_root = Path(__file__).resolve().parents[1]
+    load_env(skill_root)
+
+    if not enabled():
+        print("钉钉通知未启用，跳过发送")
+        return 0
+
+    webhook = args.webhook or os.environ.get("DINGTALK_WEBHOOK", "")
+    secret = args.secret or os.environ.get("DINGTALK_SECRET", "")
+    if not webhook:
+        message = "未配置 DINGTALK_WEBHOOK，跳过钉钉通知"
+        if args.required:
+            print(message)
+            return 1
+        print(message)
+        return 0
+
+    text = build_markdown(args)
+    response = send_markdown(signed_webhook(webhook, secret), args.title, text, args.at_all, args.at)
+    if response.get("errcode") != 0:
+        print(f"钉钉通知发送失败: {response}")
+        return 1
+    print("钉钉通知已发送")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

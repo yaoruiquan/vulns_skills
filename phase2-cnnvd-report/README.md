@@ -48,6 +48,9 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 | `DEFAULT_CONTACT_PHONE` | 默认联系电话 | `15700082275` |
 | `CHROME_DEBUG_PORT` | Chrome 调试端口 | `9333` |
 | `CHROME_PROFILE_NAME` | Chrome profile 名称 | `cnnvd-report` |
+| `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
+| `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
+| `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 
 ### 4. 启动专用浏览器
 
@@ -95,6 +98,7 @@ curl -s http://127.0.0.1:9333/json/version
 python3 scripts/extract_vuln_data.py DAS-T105966 --platform CNNVD
 python3 scripts/compress_zip.py "/path/to/CNNVD-folder"
 python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/dingtalk_notify.py --title "CNNVD 上报完成" --status success --text "编号：CNNVD-202604-XXXX\n材料已提交"
 ```
 
 更新本地汇总表：
@@ -110,6 +114,18 @@ python3 scripts/update_summary.py \
   --date "2026-04-14"
 ```
 
+推送钉钉通知：
+
+```bash
+python3 scripts/dingtalk_notify.py \
+  --title "CNNVD 上报完成" \
+  --status success \
+  --text "DAS-ID：DAS-T105966\nCNNVD 编号：CNNVD-202604-XXXX" \
+  --output "/path/to/CNNVD-folder"
+```
+
+`--text` 支持命令行字面量 `\n`，脚本会转换为真实换行。真实 webhook 只放在 `.env`，不要写入 README 或提交到 Git。
+
 ## 工作流程
 
 1. 准备本地漏洞材料、验证视频和附件。
@@ -120,6 +136,7 @@ python3 scripts/update_summary.py \
 6. 填写基本信息、漏洞详情和验证过程。
 7. 上传验证视频和 PoC 附件。
 8. 提交后获取 CNNVD-ID，并按需运行 `update_summary.py`。
+9. 如已配置 `DINGTALK_WEBHOOK`，可推送钉钉通知。
 
 ## 目录结构
 
@@ -138,7 +155,8 @@ phase2-cnnvd-report/
 │   ├── extract_vuln_data.py
 │   ├── compress_zip.py
 │   ├── captcha_ocr.py
-│   └── update_summary.py
+│   ├── update_summary.py
+│   └── dingtalk_notify.py
 └── references/
     ├── setup-guide.md
     ├── data-fields.md

@@ -43,6 +43,9 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 | `CNVD_PASSWORD` | CNVD 登录密码，可选 | 空 |
 | `CHROME_DEBUG_PORT` | Chrome 调试端口 | `9332` |
 | `CHROME_PROFILE_NAME` | Chrome profile 名称 | `cnvd-report` |
+| `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
+| `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
+| `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 
 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME` 仍兼容旧配置，但新用户应使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -97,9 +100,24 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 curl -s http://127.0.0.1:9332/json/version
 python3 scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
 python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/dingtalk_notify.py --title "CNVD 上报完成" --status success --text "编号：CNVD-2026-XXXX\n材料已提交"
 ```
 
 附件压缩包按 CNVD 页面上传要求准备；当前 skill 不包含独立的 `compress_zip.py`。
+
+## 钉钉机器人通知
+
+在 `.env` 中填写 `DINGTALK_WEBHOOK` 后，可手动推送上报结果：
+
+```bash
+python3 scripts/dingtalk_notify.py \
+  --title "CNVD 上报完成" \
+  --status success \
+  --text "DAS-ID：DAS-T105966\nCNVD 编号：CNVD-2026-XXXX" \
+  --output "/path/to/data/DAS-T105966"
+```
+
+`--text` 支持命令行字面量 `\n`，脚本会转换为真实换行。真实 webhook 只放在 `.env`，不要写入 README 或提交到 Git。
 
 ## 工作流程
 
@@ -109,6 +127,7 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 4. 打开 CNVD、登录并进入漏洞上报页。
 5. 填写通用型漏洞表单并上传附件。
 6. 识别验证码、提交并记录结果。
+7. 如已配置 `DINGTALK_WEBHOOK`，可推送钉钉通知。
 
 详细流程见 `references/workflow.md`。
 
@@ -125,7 +144,8 @@ phase2-cnvd-report/
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── start-chrome-debug.sh
 │   ├── extract_vuln_data.py
-│   └── captcha_ocr.py
+│   ├── captcha_ocr.py
+│   └── dingtalk_notify.py
 └── references/
     ├── captcha-ocr.md
     ├── field-mapping.md

@@ -26,6 +26,9 @@ vim .env
 | `CNVD_PASSWORD` | CNVD 登录密码，可选 | 空 |
 | `CHROME_DEBUG_PORT` | 本 skill 专用 Chrome 调试端口 | `9332` |
 | `CHROME_PROFILE_NAME` | 本 skill 专用 Chrome profile | `cnvd-report` |
+| `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
+| `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
+| `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -87,6 +90,7 @@ claude mcp get chrome-devtools
 | 3 | 填写表单 | 切换通用型漏洞表单，填写厂商、产品、版本和漏洞详情 |
 | 4 | 上传附件 | 上传按 CNVD 要求准备的 zip 附件 |
 | 5 | 验证提交 | OCR 识别验证码，提交并记录返回结果 |
+| 6 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
 
 详细步骤见 `references/workflow.md`。
 
@@ -101,6 +105,7 @@ claude mcp get chrome-devtools
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 docx 提取 CNVD/CNNVD 上报字段 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
+| `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人 |
 
 ---
 
@@ -121,6 +126,8 @@ claude mcp get chrome-devtools
 ## 注意事项
 
 - CNVD 密码明文存储有风险，不要复制或分享 `.env`。
+- 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
+- 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
 - 优先使用 `seed-default` 复用登录态；`live-default` 只在必要时使用。
 - 当前 skill 不包含独立的 `compress_zip.py`，附件压缩需按 CNVD 页面要求另行准备。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。

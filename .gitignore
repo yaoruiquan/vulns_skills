@@ -32,3 +32,7 @@ wechat-mp-publisher/**/.git
 # Environment files with secrets
 .env
 **/.env
+
+# Local archival copies; keep on disk, do not publish
+**/references/original-SKILL.md
+**/references/original-README.md

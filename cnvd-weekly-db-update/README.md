@@ -238,3 +238,48 @@ CONTAINER="新容器名"
 
 - [CNVD 官网](https://www.cnvd.org.cn/)
 - CNVD 共享数据下载：官网 → 统计查询 → 共享数据下载
+
+---
+
+## 八、钉钉机器人通知
+
+本 skill 支持在执行完成或失败时向钉钉自定义机器人推送 Markdown 消息。
+
+### 8.1 配置
+
+```bash
+cd /Users/yao/.claude/skills/cnvd-weekly-db-update
+cp .env.example .env
+vim .env
+```
+
+`.env` 中填写：
+
+```env
+DINGTALK_WEBHOOK=你的钉钉机器人 webhook
+DINGTALK_SECRET=
+DINGTALK_ENABLED=true
+```
+
+`.env` 已被仓库忽略，不要提交真实 webhook。
+
+### 8.2 自动推送
+
+`scripts/cnvd_weekly_update.sh` 执行成功后会自动推送：
+
+- Skill 名称
+- 执行状态
+- XML 目录
+- 已处理 XML 文件
+
+如果脚本异常退出，会推送失败状态和退出码。
+
+### 8.3 手动推送
+
+```bash
+python3 scripts/dingtalk_notify.py \
+  --title "CNVD 每周数据库更新完成" \
+  --status success \
+  --text "所有 XML 文件已解析入库并归档" \
+  --output "/Users/yao/Downloads"
+```

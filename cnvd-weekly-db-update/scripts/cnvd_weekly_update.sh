@@ -5,6 +5,11 @@
 
 set -e
 
+# 路径
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ROOT="$(dirname "$SCRIPT_DIR")"
+NOTIFY_SCRIPT="${SCRIPT_DIR}/dingtalk_notify.py"
+
 # 配置
 SERVER="10.50.10.8"
 SERVER_USER="root"
@@ -15,6 +20,30 @@ CONTAINER_CNVD="/opt/cnvd/cnvd"
 
 # 参数（展开 ~ 为实际路径）
 XML_DIR="${1:-$HOME/Downloads}"
+
+notify_dingtalk() {
+    local status="$1"
+    local title="$2"
+    local text="$3"
+
+    if [ -f "$NOTIFY_SCRIPT" ]; then
+        python3 "$NOTIFY_SCRIPT" \
+            --title "$title" \
+            --skill "cnvd-weekly-db-update" \
+            --status "$status" \
+            --text "$text" \
+            --output "$XML_DIR" || true
+    fi
+}
+
+notify_on_exit() {
+    local exit_code="$?"
+    if [ "$exit_code" -ne 0 ]; then
+        notify_dingtalk "failed" "CNVD每周数据库更新失败" "$(printf 'XML目录：%s\n退出码：%s' "$XML_DIR" "$exit_code")"
+    fi
+}
+
+trap notify_on_exit EXIT
 
 echo "=== CNVD 每周数据库更新 ==="
 echo "XML 目录: $XML_DIR"
@@ -73,3 +102,10 @@ REMOTE_SCRIPT
 echo ""
 echo "=== 更新完成 ==="
 echo "所有 XML 文件已解析入库并归档"
+
+PROCESSED_FILES=""
+for f in $XML_FILES; do
+    PROCESSED_FILES="${PROCESSED_FILES}- $(basename "$f")
+"
+done
+notify_dingtalk "success" "CNVD每周数据库更新完成" "$(printf 'XML目录：%s\n处理文件：\n%s' "$XML_DIR" "$PROCESSED_FILES")"

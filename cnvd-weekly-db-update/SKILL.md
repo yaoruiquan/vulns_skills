@@ -52,7 +52,7 @@ ssh root@10.50.10.8 "echo 'SSH OK'"
 /Users/yao/.claude/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh
 ```
 
-脚本自动完成：SCP 上传 → Docker cp → parse.py 解析 → 文件归档
+脚本自动完成：SCP 上传 → Docker cp → parse.py 解析 → 文件归档 → 钉钉通知（如果 `.env` 已配置 `DINGTALK_WEBHOOK`）
 
 ---
 
@@ -68,8 +68,24 @@ ssh root@10.50.10.8 "echo 'SSH OK'"
 cnvd-weekly-db-update/
 ├── SKILL.md              # 本文件
 ├── README.md             # 详细说明
+├── .env.example          # 钉钉 webhook 配置模板
 ├── scripts/
-│   └── cnvd_weekly_update.sh
+│   ├── cnvd_weekly_update.sh
+│   └── dingtalk_notify.py
 └── references/
     └── troubleshooting.md
 ```
+
+---
+
+## 五、钉钉通知
+
+配置方式：
+
+```bash
+cd /Users/yao/.claude/skills/cnvd-weekly-db-update
+cp .env.example .env
+vim .env
+```
+
+填写 `DINGTALK_WEBHOOK` 后，`cnvd_weekly_update.sh` 会在成功或失败时自动推送消息到钉钉群。

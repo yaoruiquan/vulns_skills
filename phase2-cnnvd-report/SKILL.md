@@ -28,6 +28,9 @@ vim .env
 | `DEFAULT_CONTACT_PHONE` | 默认联系电话 | `15700082275` |
 | `CHROME_DEBUG_PORT` | 本 skill 专用 Chrome 调试端口 | `9333` |
 | `CHROME_PROFILE_NAME` | 本 skill 专用 Chrome profile | `cnnvd-report` |
+| `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
+| `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
+| `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 
 `.env.template` 是历史模板，当前新用户优先使用 `.env.example`。
 
@@ -90,6 +93,7 @@ claude mcp get chrome-devtools
 | 4 | 漏洞详情 | 填写漏洞描述、技术支持单位和联系电话 |
 | 5 | 漏洞验证 | 填写验证过程，上传视频和 PoC 附件 |
 | 6 | 提交记录 | 提交后获取 CNNVD-ID，并按需更新汇总表 |
+| 7 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
 
 详细步骤见 `references/setup-guide.md`、`references/data-fields.md` 和 `references/summary-table.md`。
 
@@ -107,6 +111,7 @@ claude mcp get chrome-devtools
 | `scripts/compress_zip.py` | 压缩附件目录 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/update_summary.py` | 更新漏洞汇总表 |
+| `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人 |
 
 ---
 
@@ -129,6 +134,8 @@ claude mcp get chrome-devtools
 ## 注意事项
 
 - CNNVD 密码明文存储有风险，不要复制或分享 `.env`。
+- 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
+- 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
 - 受影响实体描述需要基于可追溯资料整理，不要凭空编写。
 - 有验证视频时必须上传，并按 `references/video-compression.md` 控制体积。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。
