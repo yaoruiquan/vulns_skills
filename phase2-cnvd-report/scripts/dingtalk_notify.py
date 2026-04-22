@@ -17,11 +17,19 @@ from pathlib import Path
 
 
 STATUS_ICON = {
-    "success": "[成功]",
+    "success": "✅",
     "failed": "[失败]",
     "running": "[执行中]",
     "info": "[信息]",
 }
+
+
+def parse_link(value: str) -> tuple[str, str]:
+    """解析 名称=URL 格式的链接参数。"""
+    if "=" not in value:
+        return value, value
+    label, url = value.split("=", 1)
+    return label.strip() or url.strip(), url.strip()
 
 
 def load_env(skill_root: Path) -> None:
@@ -63,6 +71,17 @@ def normalize_cli_text(value: str) -> str:
     return (value or "").replace("\\n", "\n")
 
 
+def ensure_keyword(title: str, text: str, keyword: str) -> tuple[str, str]:
+    """保证标题或正文中包含机器人关键词。"""
+    keyword = (keyword or "").strip()
+    if not keyword:
+        return title, text
+    combined = f"{title}\n{text}"
+    if keyword in combined:
+        return title, text
+    return f"{keyword} {title}", text
+
+
 def build_markdown(args: argparse.Namespace) -> str:
     """组装钉钉 Markdown 消息正文。"""
     icon = STATUS_ICON.get(args.status, STATUS_ICON["info"])
@@ -75,7 +94,9 @@ def build_markdown(args: argparse.Namespace) -> str:
 
     text = normalize_cli_text(args.text)
     if text:
-        lines.extend(["", text.strip()])
+        for line in text.strip().splitlines():
+            if line:
+                lines.append(f"- {line}")
 
     if args.output:
         lines.extend(["", f"- 输出目录：`{args.output}`"])
@@ -83,7 +104,12 @@ def build_markdown(args: argparse.Namespace) -> str:
     for file_path in args.file or []:
         lines.append(f"- 输出文件：`{file_path}`")
 
-    return "\n".join(lines)
+    for link in args.link or []:
+        label, url = parse_link(link)
+        if url:
+            lines.append(f"- [{label}]({url})")
+
+    return "\n\n".join(lines)
 
 
 def send_markdown(webhook: str, title: str, text: str, at_all: bool = False, at_mobiles: list[str] | None = None) -> dict:
@@ -112,21 +138,23 @@ def send_markdown(webhook: str, title: str, text: str, at_all: bool = False, at_
 
 
 def main() -> int:
+    skill_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="推送 skill 生成结果到钉钉机器人")
     parser.add_argument("--title", required=True, help="消息标题")
-    parser.add_argument("--skill", default="phase2-cnvd-report", help="skill 名称")
+    parser.add_argument("--skill", default=skill_root.name, help="skill 名称")
     parser.add_argument("--status", choices=["success", "failed", "running", "info"], default="success", help="任务状态")
     parser.add_argument("--text", default="", help="消息正文补充说明")
     parser.add_argument("--output", default="", help="输出目录")
     parser.add_argument("--file", action="append", help="输出文件路径，可重复传入")
+    parser.add_argument("--link", action="append", help="链接，格式：名称=URL，可重复传入")
     parser.add_argument("--webhook", default="", help="钉钉 webhook；默认读取 DINGTALK_WEBHOOK")
     parser.add_argument("--secret", default="", help="钉钉加签密钥；默认读取 DINGTALK_SECRET")
+    parser.add_argument("--keyword", default="", help="钉钉机器人关键词；默认读取 DINGTALK_KEYWORD")
     parser.add_argument("--at-all", action="store_true", help="是否 @所有人")
     parser.add_argument("--at", action="append", default=[], help="需要 @ 的手机号，可重复传入")
     parser.add_argument("--required", action="store_true", help="未配置 webhook 时返回失败")
     args = parser.parse_args()
 
-    skill_root = Path(__file__).resolve().parents[1]
     load_env(skill_root)
 
     if not enabled():
@@ -135,6 +163,7 @@ def main() -> int:
 
     webhook = args.webhook or os.environ.get("DINGTALK_WEBHOOK", "")
     secret = args.secret or os.environ.get("DINGTALK_SECRET", "")
+    keyword = args.keyword or os.environ.get("DINGTALK_KEYWORD", "")
     if not webhook:
         message = "未配置 DINGTALK_WEBHOOK，跳过钉钉通知"
         if args.required:
@@ -143,6 +172,7 @@ def main() -> int:
         print(message)
         return 0
 
+    args.title, args.text = ensure_keyword(args.title, normalize_cli_text(args.text), keyword)
     text = build_markdown(args)
     response = send_markdown(signed_webhook(webhook, secret), args.title, text, args.at_all, args.at)
     if response.get("errcode") != 0:

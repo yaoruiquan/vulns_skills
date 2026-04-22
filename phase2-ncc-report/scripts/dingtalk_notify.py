@@ -154,7 +154,6 @@ def main() -> int:
     parser.add_argument("--at", action="append", default=[], help="需要 @ 的手机号，可重复传入")
     parser.add_argument("--required", action="store_true", help="未配置 webhook 时返回失败")
     args = parser.parse_args()
-
     load_env(skill_root)
 
     if not enabled():

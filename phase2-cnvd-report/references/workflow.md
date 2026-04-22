@@ -2,8 +2,8 @@
 
 ## 流程概览
 
-```
-Step 0: 检查环境 → Step 1: 准备数据 → Step 2: 导航表单 → Step 3: 填表 → Step 4: 上传 → Step 4.5: 验证 → Step 5: 提交
+```text
+Step 0: 检查环境 -> Step 1: 准备数据 -> Step 2: 导航表单 -> Step 3: 填表 -> Step 4: 上传 -> Step 4.5: 验证 -> Step 5: 提交并提取编号 -> Step 6: 钉钉通知
 ```
 
 ---
@@ -201,7 +201,7 @@ MCP: upload_file
 
 ---
 
-## Step 5: 验证码与提交
+## Step 5: 验证码、提交与提取编号
 
 参见 [captcha-ocr.md](captcha-ocr.md)。
 
@@ -217,7 +217,35 @@ MCP: evaluate_script
     }
 ```
 
+记录：
+
+- `DAS-ID`
+- `CNVD-ID`
+- 提交时间
+- 页面成功提示或返回结果
+
 ---
+
+## Step 6: 推送钉钉通知
+
+提交成功后，如果 `.env` 已配置 `DINGTALK_WEBHOOK`，必须把本次平台编号带到钉钉消息里：
+
+```bash
+python3 scripts/dingtalk_notify.py \
+  --title "监管上报 CNVD 上报完成" \
+  --status success \
+  --text "DAS-ID：<DAS-ID>\nCNVD 编号：<CNVD-ID>" \
+  --output "<材料目录>"
+```
+
+失败时也应推送失败原因，便于群里跟踪：
+
+```bash
+python3 scripts/dingtalk_notify.py \
+  --title "监管上报 CNVD 上报失败" \
+  --status failed \
+  --text "DAS-ID：<DAS-ID>\n失败原因：<原因>"
+```
 
 > CSS 选择器参考详见 [selectors.md](selectors.md)
 > 字段映射表详见 [field-mapping.md](field-mapping.md)

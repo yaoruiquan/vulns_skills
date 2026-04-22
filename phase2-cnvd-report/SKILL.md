@@ -29,6 +29,7 @@ vim .env
 | `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
 | `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
 | `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
+| `DINGTALK_KEYWORD` | 钉钉机器人关键词 | `监管上报` |
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -89,8 +90,8 @@ claude mcp get chrome-devtools
 | 2 | 导航表单 | 打开 CNVD、登录、进入漏洞上报表单 |
 | 3 | 填写表单 | 切换通用型漏洞表单，填写厂商、产品、版本和漏洞详情 |
 | 4 | 上传附件 | 上传按 CNVD 要求准备的 zip 附件 |
-| 5 | 验证提交 | OCR 识别验证码，提交并记录返回结果 |
-| 6 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
+| 5 | 验证提交 | OCR 识别验证码，提交后提取并记录 `CNVD-xxxx` 编号 |
+| 6 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时推送 `DAS-ID` 和 `CNVD 编号` |
 
 详细步骤见 `references/workflow.md`。
 
@@ -127,7 +128,8 @@ claude mcp get chrome-devtools
 
 - CNVD 密码明文存储有风险，不要复制或分享 `.env`。
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
-- 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
+- 监管上报类技能统一使用同一个机器人，关键词统一为 `监管上报`。
+- 钉钉通知是收尾动作；提交成功后必须把 `DAS-ID` 和 `CNVD 编号` 写入 `--text`，字面量 `\n` 会被脚本转换为真实换行。
 - 优先使用 `seed-default` 复用登录态；`live-default` 只在必要时使用。
 - 当前 skill 不包含独立的 `compress_zip.py`，附件压缩需按 CNVD 页面要求另行准备。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。

@@ -98,7 +98,7 @@ curl -s http://127.0.0.1:9333/json/version
 python3 scripts/extract_vuln_data.py DAS-T105966 --platform CNNVD
 python3 scripts/compress_zip.py "/path/to/CNNVD-folder"
 python3 scripts/captcha_ocr.py /tmp/captcha.png
-python3 scripts/dingtalk_notify.py --title "CNNVD 上报完成" --status success --text "编号：CNNVD-202604-XXXX\n材料已提交"
+python3 scripts/dingtalk_notify.py --title "监管上报 CNNVD 上报完成" --status success --text "编号：CNNVD-202604-XXXX\n材料已提交"
 ```
 
 更新本地汇总表：
@@ -114,11 +114,11 @@ python3 scripts/update_summary.py \
   --date "2026-04-14"
 ```
 
-推送钉钉通知：
+推送钉钉通知（监管上报类技能统一使用同一个机器人，关键词为 `监管上报`）：
 
 ```bash
 python3 scripts/dingtalk_notify.py \
-  --title "CNNVD 上报完成" \
+  --title "监管上报 CNNVD 上报完成" \
   --status success \
   --text "DAS-ID：DAS-T105966\nCNNVD 编号：CNNVD-202604-XXXX" \
   --output "/path/to/CNNVD-folder"
@@ -136,7 +136,7 @@ python3 scripts/dingtalk_notify.py \
 6. 填写基本信息、漏洞详情和验证过程。
 7. 上传验证视频和 PoC 附件。
 8. 提交后获取 CNNVD-ID，并按需运行 `update_summary.py`。
-9. 如已配置 `DINGTALK_WEBHOOK`，可推送钉钉通知。
+9. 如已配置 `DINGTALK_WEBHOOK`，必须推送包含 `DAS-ID` 和 `CNNVD 编号` 的钉钉通知。
 
 ## 目录结构
 
