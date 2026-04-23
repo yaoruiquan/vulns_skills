@@ -51,7 +51,7 @@ def recognize_captcha(image_path: str) -> str:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法: python captcha_ocr.py <图片路径>")
+        print("用法: python3 captcha_ocr.py <图片路径>")
         sys.exit(1)
     result = recognize_captcha(sys.argv[1])
     print(result)

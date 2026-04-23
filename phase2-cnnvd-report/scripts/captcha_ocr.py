@@ -5,8 +5,8 @@
 使用 ddddocr 识别验证码图片
 
 用法：
-    python captcha_ocr.py <图片路径>
-    python captcha_ocr.py /tmp/captcha.png
+    python3 captcha_ocr.py <图片路径>
+    python3 captcha_ocr.py /tmp/captcha.png
 """
 
 import sys
@@ -39,7 +39,7 @@ def recognize_captcha(image_path: str) -> str:
 
 def main():
     if len(sys.argv) < 2:
-        print("用法: python captcha_ocr.py <图片路径>")
+        print("用法: python3 captcha_ocr.py <图片路径>")
         sys.exit(1)
 
     result = recognize_captcha(sys.argv[1])

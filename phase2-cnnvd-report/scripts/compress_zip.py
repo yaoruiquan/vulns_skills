@@ -36,7 +36,7 @@ def compress_folder(folder_path: str) -> str:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python compress_zip.py <folder_path>")
+        print("Usage: python3 compress_zip.py <folder_path>")
         sys.exit(1)
 
     folder = sys.argv[1]

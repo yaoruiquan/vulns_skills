@@ -60,29 +60,21 @@ curl -s http://127.0.0.1:9334/json/version
 
 ### 4. MCP 配置
 
-如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `chrome-devtools`。
+如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `ncc-chrome`。
 
 如果从其他项目目录启动 Claude Code，在那个项目目录注册本 skill 的 wrapper：
-
-```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
-```
-
-如果这个 skill 需要和其他浏览器 MCP 在同一个 Claude 项目里同时加载，给本 skill 使用唯一名称注册：
 
 ```bash
 claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-本 skill 的端口/profile 独立于其他 skill；只有同一个 Claude 项目里同时注册多个 MCP server 时，server 名才需要唯一。
+本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
 ### 5. 验证
 
 ```bash
 curl -s http://127.0.0.1:9334/json/version
-claude mcp get chrome-devtools
-# 如果同项目并发时注册了唯一名称，则改查：
-# claude mcp get ncc-chrome
+claude mcp get ncc-chrome
 ```
 
 ---

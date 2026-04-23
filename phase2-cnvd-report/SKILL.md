@@ -30,6 +30,8 @@ vim .env
 | `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
 | `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 | `DINGTALK_KEYWORD` | 钉钉机器人关键词 | `监管上报` |
+| `REPORT_UPLOAD_REMOTE_DIR` | CNVD zip 远端存放目录 | `/root/msrc-report-downloads/cnvd-submissions` |
+| `REPORT_DOWNLOAD_BASE_URL` | CNVD zip 下载 URL 根路径 | `http://10.50.10.29:8080/download/msrc/cnvd-submissions` |
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -54,29 +56,21 @@ curl -s http://127.0.0.1:9332/json/version
 
 ### 4. MCP 配置
 
-如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `chrome-devtools`。
+如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `cnvd-chrome`。
 
 如果从其他项目目录启动 Claude Code，在那个项目目录注册本 skill 的 wrapper：
-
-```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
-```
-
-如果这个 skill 需要和其他浏览器 MCP 在同一个 Claude 项目里同时加载，给本 skill 使用唯一名称注册：
 
 ```bash
 claude mcp add cnvd-chrome -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-本 skill 的端口/profile 独立于其他 skill；只有同一个 Claude 项目里同时注册多个 MCP server 时，server 名才需要唯一。
+本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
 ### 5. 验证
 
 ```bash
 curl -s http://127.0.0.1:9332/json/version
-claude mcp get chrome-devtools
-# 如果同项目并发时注册了唯一名称，则改查：
-# claude mcp get cnvd-chrome
+claude mcp get cnvd-chrome
 ```
 
 ---
@@ -86,12 +80,12 @@ claude mcp get chrome-devtools
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 用 `extract_vuln_data.py` 从本地 docx 提取 CNVD 字段 |
+| 1 | 准备数据 | 用 `prepare_form_context.py` 生成 `CNVD-xxx/form_context.json` |
 | 2 | 导航表单 | 打开 CNVD、登录、进入漏洞上报表单 |
-| 3 | 填写表单 | 切换通用型漏洞表单，填写厂商、产品、版本和漏洞详情 |
-| 4 | 上传附件 | 上传按 CNVD 要求准备的 zip 附件 |
+| 3 | 填写表单 | 浏览器阶段只读取 `form_context.json`，填写厂商、产品、版本和漏洞详情 |
+| 4 | 上传附件 | 上传 `form_context.json` 中 `attachment_zip_path` 指向的 CNVD 原始整包 zip |
 | 5 | 验证提交 | OCR 识别验证码，提交后提取并记录 `CNVD-xxxx` 编号 |
-| 6 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时推送 `DAS-ID` 和 `CNVD 编号` |
+| 6 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时上传单漏洞 CNVD zip，并推送漏洞名称、`DAS-ID`、`CNVD 编号` 和下载链接 |
 
 详细步骤见 `references/workflow.md`。
 
@@ -105,6 +99,8 @@ claude mcp get chrome-devtools
 | `scripts/start-chrome-debug.sh` | 启动本 skill 专用 Chrome |
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 docx 提取 CNVD/CNNVD 上报字段 |
+| `scripts/prepare_form_context.py` | 生成浏览器填表阶段唯一使用的 CNVD `form_context.json` |
+| `scripts/publish_submission_zip.py` | 上传单个 CNVD 原始整包 zip，并推送钉钉下载链接 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人 |
 
@@ -112,15 +108,10 @@ claude mcp get chrome-devtools
 
 ## 参考资料
 
-- `references/setup-guide.md`：环境与依赖说明
 - `references/workflow.md`：CNVD 上报步骤
 - `references/field-mapping.md`：字段映射
 - `references/selectors.md`：CNVD 表单选择器参考
 - `references/captcha-ocr.md`：验证码 OCR
-- `references/mcp-connection.md`：MCP 连接经验
-- `references/mcp-tools.md`：MCP 工具参考
-- `references/original-SKILL.md`：本次规范化前的原始 `SKILL.md`
-- `references/original-README.md`：本次规范化前的原始 `README.md`
 
 ---
 
@@ -129,7 +120,11 @@ claude mcp get chrome-devtools
 - CNVD 密码明文存储有风险，不要复制或分享 `.env`。
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - 监管上报类技能统一使用同一个机器人，关键词统一为 `监管上报`。
-- 钉钉通知是收尾动作；提交成功后必须把 `DAS-ID` 和 `CNVD 编号` 写入 `--text`，字面量 `\n` 会被脚本转换为真实换行。
+- 钉钉通知是收尾动作；提交成功后优先使用 `publish_submission_zip.py <form_context.json> --platform-id <CNVD-ID> --notify`，消息必须包含漏洞名称、`DAS-ID`、`CNVD 编号` 和附件下载链接。
+- `publish_submission_zip.py` 只上传单个漏洞的 CNVD 原始整包 zip，不上传整个批次目录，也不重新压缩。
 - 优先使用 `seed-default` 复用登录态；`live-default` 只在必要时使用。
-- 当前 skill 不包含独立的 `compress_zip.py`，附件压缩需按 CNVD 页面要求另行准备。
+- 浏览器阶段只能读取 `CNVD-xxx/form_context.json`；不要在第二阶段重新运行提取脚本、重新压缩目录或重新判断标题。
+- `prepare_form_context.py` 会固化 `title_input` 和 `title_final_expected`；页面填 `title_input`，提交后用 `title_final_expected` 校验最终标题。
+- `prepare_form_context.py` 会检查 `attachment_zip_path`；CNVD 上报必须上传该原始整包 zip，不要重新压缩 docx 目录。
+- 基本信息“是否公开”必须选择“否”；漏洞描述不要带 `经恒脑AI代码审计智能体分析：` 前缀。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。

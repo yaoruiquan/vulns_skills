@@ -8,6 +8,7 @@ ENV_EXAMPLE="${SKILL_ROOT}/.env.example"
 ENV_TEMPLATE="${SKILL_ROOT}/.env.template"
 MCP_WRAPPER="${SKILL_ROOT}/scripts/chrome-devtools-mcp-wrapper.sh"
 MCP_FILE="${SKILL_ROOT}/.mcp.json"
+MCP_SERVER_NAME="cnnvd-chrome"
 
 echo "Skill root: ${SKILL_ROOT}"
 
@@ -29,7 +30,7 @@ fi
 cat > "$MCP_FILE" << EOF
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "${MCP_SERVER_NAME}": {
       "command": "${MCP_WRAPPER}",
       "args": []
     }
@@ -41,12 +42,16 @@ chmod +x "${SKILL_ROOT}/scripts/start-chrome-debug.sh"
 chmod +x "${SKILL_ROOT}/scripts/chrome-devtools-mcp-wrapper.sh"
 chmod +x "${SKILL_ROOT}/scripts/compress_zip.py"
 chmod +x "${SKILL_ROOT}/scripts/extract_vuln_data.py"
+chmod +x "${SKILL_ROOT}/scripts/prepare_form_context.py"
+chmod +x "${SKILL_ROOT}/scripts/publish_submission_zip.py"
 chmod +x "${SKILL_ROOT}/scripts/update_summary.py"
 chmod +x "${SKILL_ROOT}/scripts/captcha_ocr.py"
 chmod +x "${SKILL_ROOT}/scripts/dingtalk_notify.py"
 
 echo "Wrote MCP config: ${MCP_FILE}"
+echo "MCP server name: ${MCP_SERVER_NAME}"
 echo "Next:"
 echo "1. Edit ${ENV_FILE}"
 echo "2. Start browser: ${SKILL_ROOT}/scripts/start-chrome-debug.sh"
 echo "3. Verify: curl -s http://127.0.0.1:9333/json/version"
+echo "4. Verify MCP: claude mcp get ${MCP_SERVER_NAME}"

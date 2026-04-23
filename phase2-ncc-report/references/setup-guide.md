@@ -24,7 +24,7 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 ```json
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "ncc-chrome": {
       "command": "/Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }

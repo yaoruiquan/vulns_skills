@@ -3,40 +3,59 @@
 ## 流程概览
 
 ```text
-Step 0: 检查环境 -> Step 1: 准备数据 -> Step 2: 导航表单 -> Step 3: 填表 -> Step 4: 上传 -> Step 4.5: 验证 -> Step 5: 提交并提取编号 -> Step 6: 钉钉通知
+Step 0: 检查环境 -> Step 1: 准备 FormContext -> Step 2: 导航表单 -> Step 3: 填表 -> Step 4: 上传 -> Step 4.5: 验证 -> Step 5: 提交并提取编号 -> Step 6: 钉钉通知
 ```
 
 ---
 
-## Step 1: 准备数据
+## Step 1: 准备 FormContext
 
-### 1.1 提取漏洞数据
+### 1.1 生成 `form_context.json`
 
 ```bash
-python scripts/extract_vuln_data.py <DAS-ID> --platform CNVD --data-dir "<数据目录>"
+python3 scripts/prepare_form_context.py <DAS-ID或DAS目录或CNVD目录或docx路径> --data-dir "<数据目录>"
 ```
 
 **输出示例**：
 ```json
 {
-  "das_id": "DAS-T105970",
-  "title": "Claude Code系统getMcpHeadersFromHelper模块存在命令执行漏洞",
-  "description": "漏洞描述内容...",
-  "vuln_type": "命令执行",
-  "url": "http://127.0.0.1/",
-  "unit_name": "Anthropic",
-  "soft_style_id": "28",
-  "discoverer_name": "恒脑AI代码审计智能体",
-  "affected_product": "Claude Code",
-  "version": "2.1.89"
+  "output": "/path/to/CNVD-xxx/form_context.json",
+  "ready": true,
+  "checks": {
+    "title_input_ready": true,
+    "title_final_expected_ready": true,
+    "attachment_exists": true,
+    "attachment_is_file": true,
+    "attachment_is_zip": true,
+    "attachment_name_starts_with_cnvd": true,
+    "description_ready": true,
+    "is_open_no": true,
+    "no_browser_phase_extraction": true
+  }
 }
 ```
 
-### 1.2 压缩附件
+### 1.2 浏览器阶段规则
 
-```bash
-cd "<CNVD文件夹路径>" && zip -r /tmp/<DAS-ID>-CNVD.zip .
-```
+`form_context.json` 是浏览器填表阶段唯一数据源。浏览器阶段只允许读取它，不要重新运行提取脚本、重新压缩目录或重新判断标题。
+
+关键字段：
+
+| 字段 | 用途 |
+|------|------|
+| `title_input` | CNVD 页面“漏洞名称”输入框填写值 |
+| `title_final_expected` | 提交后预期最终标题，用于一致性校验 |
+| `attachment_zip_path` | CNVD 原始整包 zip 上传路径 |
+| `attachment_status` | 附件存在性、类型、大小和命名检查 |
+| `checks` / `ready` | 准备阶段是否允许进入浏览器填表 |
+
+### 1.3 附件预检查
+
+附件必须使用 CNVD 平台目录中的原始整包 zip，即 `form_context.json` 中的 `attachment_zip_path`。
+
+- `ready` 必须为 `true` 才能进入浏览器阶段。
+- 不要把 docx 所在目录重新压缩成 `/tmp/<DAS-ID>-CNVD.zip`。
+- 如果 `attachment_exists`、`attachment_is_zip` 或 `attachment_name_starts_with_cnvd` 为 `false`，先修复材料目录，再继续上报。
 
 ---
 
@@ -109,13 +128,23 @@ MCP: fill
 
 ### 3.2 填写基本信息
 
-切换到"通用型漏洞"后，发现者和发现日期保持默认值不变，只修改"是否公开"。
+切换到"通用型漏洞"后，发现者和发现日期保持默认值不变，只修改"是否公开"。基本信息里的“是否公开”必须选择“否”。
 
 ```
 MCP: take_snapshot
-MCP: click
-  uid: "<否 radio 按钮的 uid>"
+MCP: evaluate_script
+  function: |
+    () => {
+      const candidates = Array.from(document.querySelectorAll('input[name="isOpen"]'));
+      const noRadio = candidates.find((el) => el.value === '0' || el.value === '否');
+      if (!noRadio) return { ok: false, reason: '未找到是否公开=否的 radio' };
+      noRadio.click();
+      noRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, value: noRadio.value };
+    }
 ```
+
+执行后必须确认返回 `ok: true`。如果页面快照显示“否”未选中，不要提交。
 
 ### 3.3 填写厂商信息
 
@@ -139,22 +168,22 @@ MCP: fill_form
 
 **重要：漏洞名称填写规则**
 
-CNVD 表单的漏洞名称最终组合为：`<漏洞名称输入框>存在<漏洞类型>漏洞`
+标题拆分在准备阶段已经固化，浏览器阶段不要重新拆分。
 
-- **漏洞名称输入框**：填写完整漏洞描述（不含"存在"和"漏洞"字样）
-  - 示例：`Linux内核系统rxrpc模块内存缓冲区操作限制不当`
-- **漏洞类型下拉框**：选择漏洞大类（如"二进制"、"命令执行"等）
+- “漏洞名称”输入框：填写 `form_context.json` 的 `title_input`。
+- 提交后最终标题：必须与 `form_context.json` 的 `title_final_expected` 一致。
+- “漏洞类型”下拉框：填写 `form_context.json` 的 `vuln_type`。
 
 ```
 MCP: take_snapshot
 MCP: fill_form
   elements:
     - uid: "<漏洞名称输入框的 uid>"
-      value: "<完整的漏洞描述>"
+      value: "<title_input>"
     - uid: "<漏洞类型下拉框的 uid>"
       value: "<vuln_type>"
     - uid: "<漏洞描述输入框的 uid>"
-      value: "<description>（不含前缀）"
+      value: "<description>"
     - uid: "<临时解决方案输入框的 uid>"
       value: "无"
     - uid: "<正式解决方案输入框的 uid>"
@@ -169,8 +198,10 @@ MCP: fill_form
 MCP: take_snapshot
 MCP: upload_file
   uid: "<文件上传输入框的 uid>"
-  filePath: "/tmp/<DAS-ID>-CNVD.zip"
+  filePath: "<attachment_zip_path>"
 ```
+
+这里的 `<attachment_zip_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。
 
 ---
 
@@ -196,8 +227,49 @@ MCP: upload_file
 | 漏洞描述 | ✓ 已填写 | 从数据获取 |
 | 临时解决方案 | ✓ 已填写 | 默认填写"无" |
 | 正式解决方案 | ✓ 已填写 | 默认填写"见附件" |
-| 漏洞附件 | ✓ 已上传 | zip 文件 |
+| 漏洞附件 | ✓ 已上传 | `attachment_zip_path` 指向的 CNVD 原始 zip |
 | 验证码 | 待填写 | OCR识别后填写 |
+
+同时检查：
+
+- `form_context.json` 的 `ready` 为 `true`。
+- 页面中“漏洞名称”输入值等于 `title_input`。
+- 上传附件路径等于 `attachment_zip_path`。
+- 提交后页面返回的最终漏洞标题应等于 `title_final_expected`。
+
+推荐在提交前执行一次页面内校验，避免“表单未填写完整”：
+
+```
+MCP: evaluate_script
+  function: |
+    () => {
+      const valueOf = (selector) => {
+        const el = document.querySelector(selector);
+        return el ? String(el.value || '').trim() : '';
+      };
+      const isOpenNo = Array.from(document.querySelectorAll('input[name="isOpen"]'))
+        .some((el) => (el.value === '0' || el.value === '否') && el.checked);
+      const required = {
+        "漏洞所属类型": valueOf('#isEvent1'),
+        "是否公开": isOpenNo ? '否' : '',
+        "漏洞厂商": valueOf('#manuName'),
+        "厂商官网": valueOf('#changshang1'),
+        "影响对象类型": valueOf('#softStyleId1'),
+        "影响产品": valueOf('#productCategoryName'),
+        "影响版本": valueOf('#edition'),
+        "漏洞名称": valueOf('#title1'),
+        "漏洞类型": valueOf('#titlel1'),
+        "漏洞描述": valueOf('#description1'),
+        "临时解决方案": valueOf('#tempWay1'),
+        "正式解决方案": valueOf('#formalWay11')
+      };
+      return Object.entries(required)
+        .filter(([, value]) => !value)
+        .map(([field]) => field);
+    }
+```
+
+返回必须为空数组；如果返回字段名，先补齐再提交。
 
 ---
 
@@ -228,15 +300,16 @@ MCP: evaluate_script
 
 ## Step 6: 推送钉钉通知
 
-提交成功后，如果 `.env` 已配置 `DINGTALK_WEBHOOK`，必须把本次平台编号带到钉钉消息里：
+提交成功后，如果 `.env` 已配置 `DINGTALK_WEBHOOK`，优先上传本漏洞的 CNVD 原始整包 zip，并把漏洞名称、`DAS-ID`、本次平台编号和下载链接推送到钉钉：
 
 ```bash
-python3 scripts/dingtalk_notify.py \
-  --title "监管上报 CNVD 上报完成" \
-  --status success \
-  --text "DAS-ID：<DAS-ID>\nCNVD 编号：<CNVD-ID>" \
-  --output "<材料目录>"
+python3 scripts/publish_submission_zip.py \
+  "<CNVD材料目录>/form_context.json" \
+  --platform-id "<CNVD-ID>" \
+  --notify
 ```
+
+该脚本只上传 `form_context.json` 中的 `submission_zip_path` / `attachment_zip_path`，即单个漏洞的 CNVD 原始整包 zip；不会上传整个批次目录，也不会重新压缩。默认远端目录为 `/root/msrc-report-downloads/cnvd-submissions/YYYY-MM/DAS-ID/`。
 
 失败时也应推送失败原因，便于群里跟踪：
 

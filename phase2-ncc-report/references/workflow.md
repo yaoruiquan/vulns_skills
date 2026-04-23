@@ -116,12 +116,145 @@ MCP: take_snapshot
 
 - `是否为原创漏洞` 固定选“是”。
 - `发现日期` 不直接拿 `提交日期` 硬填。
-- `漏洞类型`、`漏洞详细分类` 以页面实际下拉值为准。
+- `漏洞类型` 由页面联动逻辑处理；未知的动态下拉字段统一选“其他”。
+- 只有 `影响对象` 和 `漏洞详细分类` 两个下拉框需要按业务值精确操作。
 - `影响对象` 优先根据 `target_type` 选择。
 - `漏洞厂商 / 影响组件 / 影响版本 / 漏洞名称 / 漏洞 URL / 漏洞描述` 直接使用提取值。
 - `漏洞危害` 优先使用 `impact`；如果材料没有单独危害字段，人工提炼关键危害结论。
 - `修复方案` 先选页面单选项，再把解决方案文本写入说明框。
 - 平台必填但材料缺失时暂停，不要凭空编写。
+
+### 4.1 Element UI 下拉框规则
+
+NCC 页面使用 Element UI，下拉选项是动态 popper。点击下拉框后，MCP `take_snapshot` 可能只显示：
+
+```text
+listbox orientation="vertical"
+```
+
+但不显示选项内容。遇到这种情况，不要继续依赖 `click(uid)` 选项，直接使用 `evaluate_script` 操作 DOM。
+
+本 skill 只需要精确操作两个业务下拉框：
+
+| 下拉框 | 取值规则 |
+|--------|----------|
+| `影响对象` | 优先使用 `target_type`；无法匹配时选“其他” |
+| `漏洞详细分类` | 优先按材料和页面可选项匹配；无法确定时选“其他” |
+
+其他因为页面联动新增出来的下拉框，一律选择“其他”。
+
+可直接复用以下脚本：
+
+```javascript
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function selectElementUiByLabel(labelText, wantedText, fallbackText = '其他') {
+  const formItems = [...document.querySelectorAll('.el-form-item')];
+  const formItem = formItems.find(item => {
+    const label = item.querySelector('.el-form-item__label');
+    return label && label.innerText.trim().includes(labelText);
+  });
+  if (!formItem) {
+    return { ok: false, label: labelText, reason: 'form item not found' };
+  }
+
+  const trigger = formItem.querySelector('.el-select, .el-select__wrapper, input');
+  if (!trigger) {
+    return { ok: false, label: labelText, reason: 'select trigger not found' };
+  }
+
+  trigger.click();
+  await sleep(300);
+
+  const options = [...document.querySelectorAll('.el-select-dropdown__item')]
+    .filter(option => option.offsetParent !== null)
+    .filter(option => !option.classList.contains('is-disabled'));
+
+  const optionTexts = options.map(option => option.innerText.trim()).filter(Boolean);
+  const target =
+    options.find(option => option.innerText.trim() === wantedText) ||
+    options.find(option => option.innerText.trim().includes(wantedText)) ||
+    options.find(option => option.innerText.trim() === fallbackText) ||
+    options.find(option => option.innerText.trim().includes(fallbackText));
+
+  if (!target) {
+    return { ok: false, label: labelText, wanted: wantedText, options: optionTexts };
+  }
+
+  const selected = target.innerText.trim();
+  target.click();
+  await sleep(500);
+  return { ok: true, label: labelText, selected, options: optionTexts };
+}
+```
+
+调用示例：
+
+```javascript
+await selectElementUiByLabel('影响对象', '<target_type>', '其他');
+await selectElementUiByLabel('漏洞详细分类', '<漏洞详细分类>', '其他');
+```
+
+### 4.2 动态新增必填字段规则
+
+选择 `漏洞详细分类` 后，页面可能动态新增必填字段，例如：
+
+- `类型`
+- `中间件/框架`
+- `利用工具`
+
+这些字段不从材料中猜测。处理规则：
+
+| 新增字段类型 | 默认处理 |
+|--------------|----------|
+| 下拉框 | 选择“其他” |
+| 输入框 | 填写“见附件” |
+| 文本域 | 填写“见附件” |
+
+每次选择 `漏洞详细分类` 后必须重新扫描可见必填字段，并补齐新增项：
+
+```javascript
+async function fillDynamicRequiredFields() {
+  const items = [...document.querySelectorAll('.el-form-item')]
+    .filter(item => item.offsetParent !== null);
+
+  const results = [];
+  for (const item of items) {
+    const label = item.querySelector('.el-form-item__label')?.innerText.trim() || '';
+    const required = item.classList.contains('is-required') || label.includes('*');
+    if (!required) continue;
+
+    const select = item.querySelector('.el-select, .el-select__wrapper');
+    const textarea = item.querySelector('textarea');
+    const input = item.querySelector('input:not([type="hidden"])');
+    const currentValue = (textarea || input)?.value || '';
+
+    if (select && !currentValue) {
+      results.push(await selectElementUiByLabel(label.replace('*', ''), '其他', '其他'));
+      continue;
+    }
+
+    if ((textarea || input) && !currentValue) {
+      const target = textarea || input;
+      target.value = '见附件';
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+      results.push({ ok: true, label, filled: '见附件' });
+    }
+  }
+  return results;
+}
+```
+
+调用顺序：
+
+```javascript
+await selectElementUiByLabel('影响对象', '<target_type>', '其他');
+await selectElementUiByLabel('漏洞详细分类', '<漏洞详细分类>', '其他');
+await fillDynamicRequiredFields();
+```
 
 示例操作：
 

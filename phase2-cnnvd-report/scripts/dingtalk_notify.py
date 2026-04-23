@@ -13,6 +13,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 
@@ -140,7 +141,7 @@ def send_markdown(webhook: str, title: str, text: str, at_all: bool = False, at_
 def main() -> int:
     skill_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="推送 skill 生成结果到钉钉机器人")
-    parser.add_argument("--title", required=True, help="消息标题")
+    parser.add_argument("--title", default="监管上报 CNNVD 通知", help="消息标题")
     parser.add_argument("--skill", default=skill_root.name, help="skill 名称")
     parser.add_argument("--status", choices=["success", "failed", "running", "info"], default="success", help="任务状态")
     parser.add_argument("--text", default="", help="消息正文补充说明")
@@ -174,7 +175,11 @@ def main() -> int:
 
     args.title, args.text = ensure_keyword(args.title, normalize_cli_text(args.text), keyword)
     text = build_markdown(args)
-    response = send_markdown(signed_webhook(webhook, secret), args.title, text, args.at_all, args.at)
+    try:
+        response = send_markdown(signed_webhook(webhook, secret), args.title, text, args.at_all, args.at)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"钉钉通知发送失败: {exc}")
+        return 1
     if response.get("errcode") != 0:
         print(f"钉钉通知发送失败: {response}")
         return 1

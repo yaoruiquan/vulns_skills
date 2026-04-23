@@ -6,8 +6,8 @@
 
 - 从本地 CNNVD `docx` 材料提取上报字段。
 - 打开 CNNVD 页面并进入通用型漏洞报送流程。
-- 填写漏洞基本信息、漏洞详情和漏洞验证过程。
-- 上传验证录像、PoC 或其他附件。
+- 按 CNNVD 页面 danger/红色必填项填写，减少下拉框重复交互。
+- 上传 `exp验证视频` 或 `poc验证视频` 中的验证录像，以及 `exp` 或 `poc` 目录中的 PoC 文件。
 - 提交成功后记录 CNNVD 编号，并按需更新本地汇总表。
 
 ## 新用户上手
@@ -51,6 +51,8 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 | `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
 | `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
 | `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
+| `REPORT_UPLOAD_REMOTE_DIR` | CNNVD zip 远端存放目录 | `/root/msrc-report-downloads/cnnvd-submissions` |
+| `REPORT_DOWNLOAD_BASE_URL` | CNNVD zip 下载 URL 根路径 | `http://10.50.10.29:8080/download/msrc/cnnvd-submissions` |
 
 ### 4. 启动专用浏览器
 
@@ -68,13 +70,13 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 
 ```bash
 curl -s http://127.0.0.1:9333/json/version
-claude mcp get chrome-devtools
+claude mcp get cnnvd-chrome
 ```
 
 如果 Claude Code 不是从本 skill 目录启动，在实际项目目录注册：
 
 ```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
+claude mcp add cnnvd-chrome -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 ## 浏览器与 MCP
@@ -84,7 +86,7 @@ claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnnvd-report/
 - 调试端口：`9333`
 - Chrome profile：`cnnvd-report`
 - MCP wrapper：`scripts/chrome-devtools-mcp-wrapper.sh`
-- MCP server 名：`chrome-devtools`
+- MCP server 名：`cnnvd-chrome`
 
 `scripts/start-chrome-debug.sh` 负责启动真实 Chrome，`scripts/chrome-devtools-mcp-wrapper.sh` 只负责让 MCP attach 到 `http://127.0.0.1:9333`。
 
@@ -95,11 +97,13 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 ./scripts/setup.sh
 ./scripts/start-chrome-debug.sh
 curl -s http://127.0.0.1:9333/json/version
-python3 scripts/extract_vuln_data.py DAS-T105966 --platform CNNVD
-python3 scripts/compress_zip.py "/path/to/CNNVD-folder"
+python3 scripts/prepare_form_context.py "/path/to/DAS-T105966-xxx" --entity-description "产品简介..." --verification "验证过程摘要..."
 python3 scripts/captcha_ocr.py /tmp/captcha.png
 python3 scripts/dingtalk_notify.py --title "监管上报 CNNVD 上报完成" --status success --text "编号：CNNVD-202604-XXXX\n材料已提交"
+python3 scripts/publish_submission_zip.py "/path/to/CNNVD-xxx/form_context.json" --platform-id "CNNVD-202604-XXXX" --notify
 ```
+
+`extract_vuln_data.py` 只作为 `prepare_form_context.py` 的底层提取工具；浏览器填表前必须以 `form_context.json` 为准。
 
 更新本地汇总表：
 
@@ -126,17 +130,35 @@ python3 scripts/dingtalk_notify.py \
 
 `--text` 支持命令行字面量 `\n`，脚本会转换为真实换行。真实 webhook 只放在 `.env`，不要写入 README 或提交到 Git。
 
+`--title` 有默认值，但提交成功或失败通知建议显式传入，避免群消息标题不清楚。
+
+提交成功后推荐使用 `publish_submission_zip.py` 作为收尾动作，它只上传单个漏洞的 CNNVD 原始整包 zip，并在钉钉 Markdown 中附带漏洞名称、`DAS-ID`、`CNNVD 编号`、附件名、大小和下载链接。默认远端目录为：
+
+```text
+/root/msrc-report-downloads/cnnvd-submissions/YYYY-MM/DAS-ID/
+```
+
+默认下载链接复用现有 MSRC 下载服务前缀：
+
+```text
+http://10.50.10.29:8080/download/msrc/cnnvd-submissions/YYYY-MM/DAS-ID/CNNVD-xxx.zip
+```
+
 ## 工作流程
 
 1. 准备本地漏洞材料、验证视频和附件。
-2. 运行 `extract_vuln_data.py` 提取字段。
-3. 必要时运行 `compress_zip.py` 压缩附件目录。
-4. 启动 skill 专用浏览器并确认 MCP 可用。
-5. 打开 CNNVD、登录并进入通用型漏洞报送。
-6. 填写基本信息、漏洞详情和验证过程。
-7. 上传验证视频和 PoC 附件。
+2. 数据准备阶段运行 `prepare_form_context.py` 生成 `form_context.json`；websearch 补齐受影响实体描述，并把 Word 中的详细验证过程总结压缩为一段文字。
+3. 启动 skill 专用浏览器并确认 MCP 可用。
+4. 打开 CNNVD、登录并进入通用型漏洞报送。
+5. 第 1 页只处理必填项；必填下拉框只选择漏洞类型、漏洞自评级、受影响实体分类。
+6. 第 2 页只填写漏洞描述或简介、技术支持、技术支持联系电话。
+7. 第 3 页填写单段验证过程，并上传 `verification_video_path` 和 `poc_file_path`。
 8. 提交后获取 CNNVD-ID，并按需运行 `update_summary.py`。
-9. 如已配置 `DINGTALK_WEBHOOK`，必须推送包含 `DAS-ID` 和 `CNNVD 编号` 的钉钉通知。
+9. 如已配置 `DINGTALK_WEBHOOK`，运行 `publish_submission_zip.py <form_context.json> --platform-id <CNNVD-ID> --notify`，上传单漏洞 CNNVD zip 并推送包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和下载链接的钉钉通知。
+
+进入浏览器阶段后，只读取 `form_context.json`。第 2 页和第 3 页不要重新运行提取脚本；第 2 页“漏洞描述或简介”只填 255 字以内的 `description`，不要改用 `description_full`。第 3 页漏洞验证阶段也不要再跑 Word 提取脚本或重新总结，只填已有的 `FormContext.verification`。
+
+遇到下拉框判断不确定时，先查 `references/dropdown-options.md`，不要在页面里反复展开后再临时判断。级联下拉要点击最终叶子选项前面的圆圈/单选按钮完成选择，不要只点击文字，也不要按 Escape 关闭。
 
 ## 目录结构
 
@@ -153,22 +175,21 @@ phase2-cnnvd-report/
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── start-chrome-debug.sh
 │   ├── extract_vuln_data.py
+│   ├── prepare_form_context.py
+│   ├── publish_submission_zip.py
 │   ├── compress_zip.py
 │   ├── captcha_ocr.py
 │   ├── update_summary.py
 │   └── dingtalk_notify.py
 └── references/
-    ├── setup-guide.md
+    ├── data-preparation.md
     ├── data-fields.md
+    ├── dropdown-options.md
     ├── vuln-type-mapping.md
     ├── captcha-ocr.md
     ├── word-extraction.md
     ├── video-compression.md
-    ├── summary-table.md
-    ├── mcp-tools.md
-    ├── mcp-connection.md
-    ├── original-SKILL.md
-    └── original-README.md
+    └── summary-table.md
 ```
 
 ## 排错
@@ -183,7 +204,7 @@ curl -s http://127.0.0.1:9333/json/version
 ### Claude 连到了错误的浏览器
 
 - 确认当前 Claude Code 启动目录。
-- 确认 `claude mcp get chrome-devtools` 的 wrapper 路径。
+- 确认 `claude mcp get cnnvd-chrome` 的 wrapper 路径。
 - 确认 `.mcp.json` 指向当前 skill 的 `scripts/chrome-devtools-mcp-wrapper.sh`。
 
 ### 找不到漏洞材料
@@ -203,26 +224,23 @@ curl -s http://127.0.0.1:9333/json/version
 
 不要手工改 wrapper 脚本；路径变化由 `setup.sh` 重新生成 `.mcp.json`。
 
-## 高级：同项目加载多个浏览器 MCP
+## 多浏览器 MCP 并发
 
-各 skill 的端口/profile 可以独立运行。同一个 Claude 项目里同时注册多个 MCP server 时，server 名必须唯一：
+各 skill 的端口/profile/MCP server 名必须独立运行。本 skill 默认使用唯一名称：
 
 ```bash
 claude mcp add cnnvd-chrome -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-这个是高级用法，不是单个 skill 的默认使用方式。单独使用本 skill 时，保持 `chrome-devtools` 这个默认名称即可。
+不要把本 skill 注册成通用的 `chrome-devtools`，否则同一 Claude 项目里加载 CNVD、CNNVD、NCC 或预警 skill 时会互相覆盖。
 
 ## 参考文档
 
-- [setup-guide.md](references/setup-guide.md)
+- [data-preparation.md](references/data-preparation.md)
 - [data-fields.md](references/data-fields.md)
+- [dropdown-options.md](references/dropdown-options.md)
 - [vuln-type-mapping.md](references/vuln-type-mapping.md)
 - [captcha-ocr.md](references/captcha-ocr.md)
 - [word-extraction.md](references/word-extraction.md)
 - [video-compression.md](references/video-compression.md)
 - [summary-table.md](references/summary-table.md)
-- [mcp-tools.md](references/mcp-tools.md)
-- [mcp-connection.md](references/mcp-connection.md)
-- [original-SKILL.md](references/original-SKILL.md)
-- [original-README.md](references/original-README.md)

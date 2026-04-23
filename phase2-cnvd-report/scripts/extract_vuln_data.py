@@ -5,6 +5,7 @@
 import sys
 import os
 import json
+import re
 from pathlib import Path
 
 # 加载 .env 配置
@@ -47,6 +48,50 @@ def find_docx_path(das_id: str, platform: str, data_dir: str = DEFAULT_DATA_DIR)
                         if f.endswith('.docx') and not f.startswith('.') and os.path.isfile(f_path):
                             return f_path
     return None
+
+
+def find_attachment_zip_path(platform_folder: str, platform: str) -> str:
+    """查找平台原始 zip 附件，优先使用 CNVD/CNNVD 整包 zip，不重新压缩目录"""
+    folder = Path(platform_folder)
+    if not folder.exists():
+        return ""
+
+    platform_upper = platform.upper()
+    search_roots = [folder.parent, folder]
+
+    platform_zips = []
+    fallback_zips = []
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for path in root.iterdir():
+            if not path.is_file() or path.suffix.lower() != ".zip" or path.name.startswith("."):
+                continue
+            if path.name.upper().startswith(platform_upper):
+                platform_zips.append(path)
+            elif root == folder:
+                fallback_zips.append(path)
+
+    zip_files = platform_zips or fallback_zips
+    if not zip_files:
+        return ""
+
+    return str(max(zip_files, key=lambda path: path.stat().st_size))
+
+
+def clean_cnvd_description(description: str) -> str:
+    """清理 CNVD 漏洞描述中不应填写到表单的固定分析前缀"""
+    if not description:
+        return ""
+
+    cleaned = description.strip()
+    cleaned = re.sub(
+        r"^\s*经恒脑\s*AI\s*代码审计智能体分析[:：]\s*",
+        "",
+        cleaned,
+        count=1,
+    )
+    return cleaned.strip()
 
 
 def extract_fields_from_docx(doc_path: str) -> Dict[str, str]:
@@ -119,11 +164,13 @@ def extract_cnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[str
 
     fields = extract_fields_from_docx(doc_path)
     folder_path = os.path.dirname(doc_path)
+    description = clean_cnvd_description(fields.get("漏洞描述", ""))
+    attachment_zip_path = find_attachment_zip_path(folder_path, "CNVD")
 
     return {
         "das_id": das_id,
         "title": fields.get("漏洞名称", ""),
-        "description": fields.get("漏洞描述", ""),
+        "description": description,
         "vuln_type": map_cnvd_vuln_type(fields.get("漏洞类型", "")),
         "vuln_type_raw": fields.get("漏洞类型", ""),
         "url": fields.get("漏洞URL", ""),
@@ -135,6 +182,7 @@ def extract_cnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[str
         "version": fields.get("影响版本", ""),
         "folder_path": folder_path,
         "docx_path": doc_path,
+        "attachment_zip_path": attachment_zip_path,
     }
 
 
@@ -146,6 +194,7 @@ def extract_cnnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[st
 
     fields = extract_fields_from_docx(doc_path)
     folder_path = os.path.dirname(doc_path)
+    attachment_zip_path = find_attachment_zip_path(folder_path, "CNNVD")
 
     return {
         "das_id": das_id,
@@ -159,12 +208,13 @@ def extract_cnnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[st
         "verification": fields.get("漏洞验证过程", ""),
         "folder_path": folder_path,
         "docx_path": doc_path,
+        "attachment_zip_path": attachment_zip_path,
     }
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python extract_vuln_data.py <das_id> [--platform CNVD|CNNVD] [--data-dir <path>]")
+        print("Usage: python3 extract_vuln_data.py <das_id> [--platform CNVD|CNNVD] [--data-dir <path>]")
         print("  默认平台: CNVD")
         sys.exit(1)
 

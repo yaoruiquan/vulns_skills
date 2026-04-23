@@ -69,13 +69,13 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 
 ```bash
 curl -s http://127.0.0.1:9334/json/version
-claude mcp get chrome-devtools
+claude mcp get ncc-chrome
 ```
 
 如果 Claude Code 不是从本 skill 目录启动，在实际项目目录注册：
 
 ```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
+claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
 ## 浏览器与 MCP
@@ -85,7 +85,7 @@ claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-ncc-report/sc
 - 调试端口：`9334`
 - Chrome profile：`ncc-report`
 - MCP wrapper：`scripts/chrome-devtools-mcp-wrapper.sh`
-- MCP server 名：`chrome-devtools`
+- MCP server 名：`ncc-chrome`
 
 `scripts/start-chrome-debug.sh` 负责启动真实 Chrome，`scripts/chrome-devtools-mcp-wrapper.sh` 只负责让 MCP attach 到 `http://127.0.0.1:9334`。
 
@@ -175,7 +175,7 @@ curl -s http://127.0.0.1:9334/json/version
 ### Claude 连到了错误的浏览器
 
 - 确认当前 Claude Code 启动目录。
-- 确认 `claude mcp get chrome-devtools` 的 wrapper 路径。
+- 确认 `claude mcp get ncc-chrome` 的 wrapper 路径。
 - 确认 `.mcp.json` 指向当前 skill 的 `scripts/chrome-devtools-mcp-wrapper.sh`。
 
 ### 平台登录态或验证码问题
@@ -209,15 +209,15 @@ curl -s http://127.0.0.1:9334/json/version
 
 不要手工改 wrapper 脚本；路径变化由 `setup.sh` 重新生成 `.mcp.json`。
 
-## 高级：同项目加载多个浏览器 MCP
+## 多浏览器 MCP 并发
 
-各 skill 的端口/profile 可以独立运行。同一个 Claude 项目里同时注册多个 MCP server 时，server 名必须唯一：
+各 skill 的端口/profile/MCP server 名必须独立运行。本 skill 默认使用唯一名称：
 
 ```bash
 claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-这个是高级用法，不是单个 skill 的默认使用方式。单独使用本 skill 时，保持 `chrome-devtools` 这个默认名称即可。
+不要把本 skill 注册成通用的 `chrome-devtools`，否则同一 Claude 项目里加载 CNVD、CNNVD、NCC 或预警 skill 时会互相覆盖。
 
 ## 参考文档
 

@@ -23,14 +23,10 @@ curl -s http://127.0.0.1:9334/json/version
 如果 Claude Code 不是从本 skill 目录启动，在实际项目目录注册：
 
 ```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
-```
-
-同一项目同时加载多个浏览器 MCP 时，使用唯一名称：
-
-```bash
 claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
+
+同一项目同时加载多个浏览器 MCP 时，不要改回通用的 `chrome-devtools` 名称。
 
 ## 常见问题
 

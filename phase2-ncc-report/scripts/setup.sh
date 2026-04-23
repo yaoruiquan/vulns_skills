@@ -7,6 +7,7 @@ ENV_FILE="${SKILL_ROOT}/.env"
 ENV_EXAMPLE="${SKILL_ROOT}/.env.example"
 MCP_WRAPPER="${SKILL_ROOT}/scripts/chrome-devtools-mcp-wrapper.sh"
 MCP_FILE="${SKILL_ROOT}/.mcp.json"
+MCP_SERVER_NAME="ncc-chrome"
 
 echo "Skill root: ${SKILL_ROOT}"
 
@@ -27,7 +28,7 @@ fi
 cat > "$MCP_FILE" << EOF
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "${MCP_SERVER_NAME}": {
       "command": "${MCP_WRAPPER}",
       "args": []
     }
@@ -42,7 +43,9 @@ chmod +x "${SKILL_ROOT}/scripts/captcha_ocr.py"
 chmod +x "${SKILL_ROOT}/scripts/dingtalk_notify.py"
 
 echo "Wrote MCP config: ${MCP_FILE}"
+echo "MCP server name: ${MCP_SERVER_NAME}"
 echo "Next:"
 echo "1. Edit ${ENV_FILE}"
 echo "2. Start browser: ${SKILL_ROOT}/scripts/start-chrome-debug.sh"
 echo "3. Verify: curl -s http://127.0.0.1:9334/json/version"
+echo "4. Verify MCP: claude mcp get ${MCP_SERVER_NAME}"

@@ -34,7 +34,7 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 ```json
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "cnnvd-chrome": {
       "command": "/Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }

@@ -32,6 +32,8 @@ vim .env
 | `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
 | `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
 | `DINGTALK_KEYWORD` | 钉钉机器人关键词 | `监管上报` |
+| `REPORT_UPLOAD_REMOTE_DIR` | CNNVD zip 远端存放目录 | `/root/msrc-report-downloads/cnnvd-submissions` |
+| `REPORT_DOWNLOAD_BASE_URL` | CNNVD zip 下载 URL 根路径 | `http://10.50.10.29:8080/download/msrc/cnnvd-submissions` |
 
 `.env.template` 是历史模板，当前新用户优先使用 `.env.example`。
 
@@ -56,29 +58,21 @@ curl -s http://127.0.0.1:9333/json/version
 
 ### 4. MCP 配置
 
-如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `chrome-devtools`。
+如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `cnnvd-chrome`。
 
 如果从其他项目目录启动 Claude Code，在那个项目目录注册本 skill 的 wrapper：
-
-```bash
-claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
-```
-
-如果这个 skill 需要和其他浏览器 MCP 在同一个 Claude 项目里同时加载，给本 skill 使用唯一名称注册：
 
 ```bash
 claude mcp add cnnvd-chrome -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
 
-本 skill 的端口/profile 独立于其他 skill；只有同一个 Claude 项目里同时注册多个 MCP server 时，server 名才需要唯一。
+本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
 ### 5. 验证
 
 ```bash
 curl -s http://127.0.0.1:9333/json/version
-claude mcp get chrome-devtools
-# 如果同项目并发时注册了唯一名称，则改查：
-# claude mcp get cnnvd-chrome
+claude mcp get cnnvd-chrome
 ```
 
 ---
@@ -88,15 +82,15 @@ claude mcp get chrome-devtools
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 用 `extract_vuln_data.py` 从本地 docx 提取 CNNVD 字段 |
+| 1 | 准备数据 | 运行 `prepare_form_context.py` 生成 `form_context.json`；Word 提取、受影响实体描述、验证过程、附件和下拉值在此阶段定稿 |
 | 2 | 导航登录 | 打开 CNNVD、登录、进入通用型漏洞报送 |
-| 3 | 基本信息 | 填写漏洞名称、类型、受影响实体和实体描述 |
-| 4 | 漏洞详情 | 填写漏洞描述、技术支持单位和联系电话 |
-| 5 | 漏洞验证 | 填写验证过程，上传视频和 PoC 附件 |
+| 3 | 基本信息 | 只处理必填项；必填下拉框为漏洞类型、漏洞自评级、受影响实体分类 |
+| 4 | 漏洞详情 | 只填写漏洞描述或简介、技术支持、技术支持联系电话 |
+| 5 | 漏洞验证 | 填写单段验证过程，上传 `verification_video_path` 和 `poc_file_path` |
 | 6 | 提交记录 | 提交后获取 `CNNVD-ID`，并按需更新汇总表 |
-| 7 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时推送 `DAS-ID` 和 `CNNVD 编号` |
+| 7 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时上传单漏洞 CNNVD zip，并推送漏洞名称、`DAS-ID`、`CNNVD 编号` 和下载链接 |
 
-详细步骤见 `references/setup-guide.md`、`references/data-fields.md` 和 `references/summary-table.md`。
+详细步骤见 `references/data-preparation.md`、`references/data-fields.md`、`references/dropdown-options.md` 和 `references/summary-table.md`。
 
 ---
 
@@ -109,7 +103,9 @@ claude mcp get chrome-devtools
 | `scripts/start-chrome-debug.sh` | 启动本 skill 专用 Chrome |
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 docx 提取 CNVD/CNNVD 上报字段 |
-| `scripts/compress_zip.py` | 压缩附件目录 |
+| `scripts/prepare_form_context.py` | 生成浏览器阶段唯一读取的 `form_context.json` |
+| `scripts/publish_submission_zip.py` | 上传单个 CNNVD 原始整包 zip，并推送钉钉下载链接 |
+| `scripts/compress_zip.py` | 可选历史工具；当前最小必填流程不依赖它 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/update_summary.py` | 更新漏洞汇总表 |
 | `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人 |
@@ -118,17 +114,14 @@ claude mcp get chrome-devtools
 
 ## 参考资料
 
-- `references/setup-guide.md`：环境配置详细步骤
-- `references/data-fields.md`：数据字段映射
+- `references/data-preparation.md`：数据准备和完整 FormContext 规范
+- `references/data-fields.md`：数据字段映射和最小必填填写规则
+- `references/dropdown-options.md`：CNNVD 必填下拉框速查表
 - `references/vuln-type-mapping.md`：漏洞类型级联选择
 - `references/captcha-ocr.md`：验证码 OCR
 - `references/word-extraction.md`：Word 提取规则
 - `references/video-compression.md`：视频压缩
 - `references/summary-table.md`：汇总表说明
-- `references/mcp-tools.md`：MCP 工具参考
-- `references/mcp-connection.md`：MCP 连接经验
-- `references/original-SKILL.md`：本次规范化前的原始 `SKILL.md`
-- `references/original-README.md`：本次规范化前的原始 `README.md`
 
 ---
 
@@ -137,7 +130,16 @@ claude mcp get chrome-devtools
 - CNNVD 密码明文存储有风险，不要复制或分享 `.env`。
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - 监管上报类技能统一使用同一个机器人，关键词统一为 `监管上报`。
-- 钉钉通知是收尾动作；提交成功后必须把 `DAS-ID` 和 `CNNVD 编号` 写入 `--text`，字面量 `\n` 会被脚本转换为真实换行。
-- 受影响实体描述需要基于可追溯资料整理，不要凭空编写。
-- 有验证视频时必须上传，并按 `references/video-compression.md` 控制体积。
+- 钉钉通知是收尾动作；提交成功后优先使用 `publish_submission_zip.py <form_context.json> --platform-id <CNNVD-ID> --notify`，消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。
+- `publish_submission_zip.py` 只上传单个漏洞的 CNNVD 原始整包 zip，不上传整个批次目录，也不重新压缩。
+- CNNVD 表单只填写带 danger/红色必填标记的字段；非必填字段不要为了补充信息而反复操作下拉框。
+- Step 1 必须生成 `form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
+- `prepare_form_context.py` 负责整理完整 `FormContext`，包括 websearch 得到的受影响实体描述和总结压缩后的漏洞验证过程。
+- 第 3 页漏洞验证阶段禁止再跑 Word 提取脚本；只填 `FormContext.verification`。如果为空，回到 Step 1 补齐。
+- 第 1 页只操作三个必填下拉框：漏洞类型、漏洞自评级、受影响实体分类；遇到选项判断先查 `references/dropdown-options.md`。
+- 级联下拉必须点击最终叶子选项前面的圆圈/单选按钮完成选择，不要只点击文字，也不要按 Escape 关闭。
+- 漏洞描述或简介使用 Word 的“漏洞简介”，不要带 `经恒脑AI代码审计智能体分析：` 前缀。
+- `漏洞描述或简介` 最多 255 字，只填 `description`，不要改用 `description_full`。
+- 验证过程需要根据 `verification_source` 自行总结压缩成一段文字，不插入图片，不直接粘贴 `verification_source` 或 Word 超长原文。
+- 有验证视频和 PoC 时必须分别上传 `verification_video_path` 和 `poc_file_path`，并按 `references/video-compression.md` 控制体积。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。

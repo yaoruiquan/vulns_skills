@@ -103,7 +103,7 @@ chmod +x /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mc
 ```json
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "cnvd-chrome": {
       "command": "/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
@@ -149,7 +149,7 @@ ls -l /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-w
 ```json
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "cnvd-chrome": {
       "command": "/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
       "args": []
     }
@@ -212,7 +212,7 @@ A: 检查以下几点：
 1. wrapper 脚本是否有执行权限 (`chmod +x`)
 2. Chrome 是否已通过 `scripts/start-chrome-debug.sh` 启动，并监听 `9332`
 3. 运行 `/mcp` 重新加载 MCP 连接
-4. 检查 `.mcp.json` 或 `claude mcp get chrome-devtools` 的 wrapper 路径是否正确
+4. 检查 `.mcp.json` 或 `claude mcp get cnvd-chrome` 的 wrapper 路径是否正确
 
 **Q: 连接成功但无法操作页面？**
 
@@ -230,7 +230,7 @@ A: 这通常是 Cloudflare 拒绝了“全新 profile”的浏览器指纹。按
 
 **Q: 配置了 .mcp.json 但不生效？**
 
-A: 确认 Claude Code 是从本 skill 目录启动的；如果不是，请在实际项目目录运行 `claude mcp add chrome-devtools -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh`。
+A: 确认 Claude Code 是从本 skill 目录启动的；如果不是，请在实际项目目录运行 `claude mcp add cnvd-chrome -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh`。
 
 **Q: 为什么现在没有第二个写着“被 MCP 控制”的 Chrome？**
 

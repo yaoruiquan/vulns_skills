@@ -64,21 +64,21 @@ mv "/path/to/原始文件夹名" "/path/to/杭州安恒信息原创漏洞报送N
 ### 单个漏洞处理
 
 ```bash
-python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
+python3 /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data DAS-T105916
 ```
 
 ### 批量处理
 
 ```bash
-python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
+python3 /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data batch
 ```
 
 ### 列出漏洞状态
 
 ```bash
-python /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
+python3 /Users/yao/.claude/skills/phase1-material-processor/scripts/test_material.py \
   --dir /path/to/data list
 ```
 
