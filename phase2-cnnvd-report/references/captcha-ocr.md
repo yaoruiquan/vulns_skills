@@ -29,33 +29,25 @@ python3 scripts/captcha_ocr.py <图片路径>
 python3 scripts/captcha_ocr.py /tmp/captcha.png
 # 输出：读书
 
-# 静默模式（只输出结果）
-python3 scripts/captcha_ocr.py /tmp/captcha.png 2>/dev/null | tail -1
+# 加速模式：先启动常驻 OCR 服务，模型只加载一次
+python3 scripts/captcha_ocr.py --serve --port 18765
+
+# 之后每次识别走本地服务，避免重复加载 ddddocr
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
+
+# 也可以通过环境变量配置
+export CAPTCHA_OCR_SERVER_URL=http://127.0.0.1:18765
+python3 scripts/captcha_ocr.py /tmp/captcha.png
 ```
 
-### 脚本实现
+## 当前识别逻辑
 
-```python
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import sys
-import ddddocr
+当前脚本使用 `ddddocr`：
 
-def recognize_captcha(image_path: str) -> str:
-    """识别验证码图片"""
-    ocr = ddddocr.DdddOcr()
-    with open(image_path, 'rb') as f:
-        image_data = f.read()
-    result = ocr.classification(image_data)
-    return result.strip()
+- 普通模式：每次执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png` 都会启动 Python 进程并加载一次 `ddddocr` 模型。
+- 加速模式：执行 `python3 scripts/captcha_ocr.py --serve --port 18765` 后，OCR 模型常驻内存；后续识别只把图片发给本地服务，速度明显更快。
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("用法: python3 captcha_ocr.py <图片路径>")
-        sys.exit(1)
-    result = recognize_captcha(sys.argv[1])
-    print(result)
-```
+验证码刷新太快时，优先使用加速模式。
 
 ## 自动化流程
 
@@ -97,5 +89,7 @@ if __name__ == "__main__":
 ## 注意事项
 
 1. **识别失败处理**：OCR 识别率不是 100%，失败时重新截图并重试
-2. **验证码刷新**：点击"换一张"可以刷新验证码
-3. **静默模式**：使用 `2>/dev/null | tail -1` 只获取识别结果，过滤欢迎信息
+2. **验证码刷新**：验证码必须放到提交前最后一步处理；不要在识别后再 `take_snapshot`、检查字段或等待人工判断，否则验证码可能刷新
+3. **加速优先**：验证码刷新太快时，先启动 `python3 scripts/captcha_ocr.py --serve --port 18765`，后续识别统一走 `--server-url`
+4. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
+5. **失败重试**：如果页面提示验证码错误，立即重新截图当前验证码并重试，不复用旧识别结果

@@ -93,37 +93,6 @@ def title_from_dir_name(name: str) -> str:
     return cleaned.strip("-") or name
 
 
-def find_nearby_context(zip_path: Path) -> dict:
-    """直接传 zip 时，尝试读取同一 DAS 目录下 CNNVD 子目录的 form_context.json。"""
-    roots = [zip_path.parent]
-    if zip_path.parent.parent not in roots:
-        roots.append(zip_path.parent.parent)
-
-    for root in roots:
-        if not root.is_dir():
-            continue
-        direct = root / "form_context.json"
-        if direct.is_file():
-            try:
-                context = read_context(direct)
-                if context.get("platform") == PLATFORM or "CNNVD-" in direct.parent.name:
-                    return context
-            except (OSError, json.JSONDecodeError):
-                pass
-
-        for child in root.iterdir():
-            if not child.is_dir() or not child.name.startswith("CNNVD-"):
-                continue
-            candidate = child / "form_context.json"
-            if not candidate.is_file():
-                continue
-            try:
-                return read_context(candidate)
-            except (OSError, json.JSONDecodeError):
-                continue
-    return {}
-
-
 def find_platform_zip(folder_path: str) -> str:
     """查找单个 CNNVD 原始整包 zip，优先查平台目录父级。"""
     folder = Path(folder_path).expanduser()
@@ -143,7 +112,7 @@ def find_platform_zip(folder_path: str) -> str:
 
 
 def resolve_zip_and_context(target: str, vuln_name: str = "") -> tuple[Path, dict]:
-    """兼容 form_context.json 或 zip 路径。"""
+    """优先使用 form_context.json；zip 路径仅作为兼容输入。"""
     path = Path(target).expanduser().resolve()
     if not path.exists():
         raise SystemExit(f"输入路径不存在: {path}")
@@ -160,18 +129,18 @@ def resolve_zip_and_context(target: str, vuln_name: str = "") -> tuple[Path, dic
         return Path(zip_path).expanduser().resolve(), context
 
     if path.is_file() and path.suffix.lower() == ".zip":
-        context = find_nearby_context(path)
-        if not context:
-            context = {
-                "das_id": extract_das_id(path.name, path.parent.name),
-                "title": title_from_dir_name(path.parent.name),
-                "folder_path": str(path.parent),
-            }
+        context = {
+            "das_id": extract_das_id(path.name, path.parent.name),
+            "title": title_from_dir_name(path.parent.name),
+            "folder_path": str(path.parent),
+            "submission_zip_path": str(path),
+            "attachment_zip_path": str(path),
+        }
         if vuln_name:
             context["title"] = vuln_name
         return path, context
 
-    raise SystemExit("输入必须是 form_context.json 或 CNNVD-*.zip")
+    raise SystemExit("输入必须是 form_context.json（推荐）或 CNNVD-*.zip 兼容路径")
 
 
 def validate_zip(zip_path: Path, *, allow_non_prefixed: bool = False) -> None:
@@ -306,7 +275,7 @@ def notify(result: dict, args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="上传单个 CNNVD 原始 zip，并可推送钉钉下载链接")
-    parser.add_argument("target", help="CNNVD form_context.json 或 CNNVD-*.zip 路径")
+    parser.add_argument("target", help="CNNVD form_context.json 路径（推荐）或 CNNVD-*.zip 兼容路径")
     parser.add_argument("--platform-id", default="", help="提交成功后的 CNNVD 编号")
     parser.add_argument("--das-id", default="", help="DAS-ID；默认从 form_context.json 读取")
     parser.add_argument("--vuln-name", default="", help="漏洞名称；默认从 form_context.json 读取")

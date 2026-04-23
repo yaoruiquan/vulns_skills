@@ -6,7 +6,7 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 
 数据准备阶段必须一次性整理完整 `FormContext`，不是只跑 Word 提取。详见 [data-preparation.md](data-preparation.md)。
 
-`prepare_form_context.py` 在流程开始时运行一次，生成 `form_context.json`。后续浏览器阶段只读这个 JSON，不要再次执行提取脚本。
+`prepare_form_context.py` 在流程开始时运行一次，默认生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。后续浏览器阶段只读这个 JSON，不要再次执行提取脚本。
 
 下拉框遇到不确定时，优先查 [dropdown-options.md](dropdown-options.md)。
 

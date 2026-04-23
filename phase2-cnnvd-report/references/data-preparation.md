@@ -27,11 +27,13 @@ python3 scripts/prepare_form_context.py \
   --verification "验证过程显示，漏洞入口位于模板 ZIP 上传功能。攻击者在具备后台权限并获取有效 token 后，构造包含合法模板文件和路径遍历文件名的 ZIP 包上传，服务端未校验压缩包内全部文件名，解压后可将恶意 PHP 文件写入可访问目录。访问写入文件可触发代码执行，证明该漏洞可被利用。"
 ```
 
-默认输出到 CNNVD 材料目录：
+默认输出到 `/tmp` 运行时目录，避免污染 CNNVD 提交材料目录：
 
 ```text
-CNNVD-xxx/form_context.json
+/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json
 ```
+
+如需指定其他位置，使用 `--output`。
 
 ---
 
@@ -109,7 +111,7 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 
 ## 五、页面复用规则
 
-- 浏览器阶段只读取 `form_context.json`。
+- 浏览器阶段只读取 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。
 - 第 1 页使用 `vuln_type`、`risk_level`、`affected_entity_category`、`title`、`affected_product`、`version`、`entity_description`。
 - 第 2 页使用 `description`、`technical_support`、`contact`；`description` 已限制在 255 字以内，不要改用 `description_full`。
 - 第 3 页使用 `verification`、`verification_video_path`、`poc_file_path`。
@@ -138,7 +140,7 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 
 ```bash
 python3 scripts/publish_submission_zip.py \
-  "<CNNVD材料目录>/form_context.json" \
+  "/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json" \
   --platform-id "<CNNVD-ID>" \
   --notify
 ```

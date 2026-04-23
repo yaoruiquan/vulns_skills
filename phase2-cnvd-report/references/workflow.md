@@ -16,10 +16,12 @@ Step 0: 检查环境 -> Step 1: 准备 FormContext -> Step 2: 导航表单 -> St
 python3 scripts/prepare_form_context.py <DAS-ID或DAS目录或CNVD目录或docx路径> --data-dir "<数据目录>"
 ```
 
+默认输出到 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。运行时 JSON 不写入 CNVD 材料目录；如需指定其他位置，使用 `--output`。
+
 **输出示例**：
 ```json
 {
-  "output": "/path/to/CNVD-xxx/form_context.json",
+  "output": "/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json",
   "ready": true,
   "checks": {
     "title_input_ready": true,
@@ -277,6 +279,42 @@ MCP: evaluate_script
 
 参见 [captcha-ocr.md](captcha-ocr.md)。
 
+验证码必须在提交前最后处理，推荐流程：
+
+1. 先完成 Step 4.5 表单完整性校验，确认除验证码外没有缺失字段。
+2. 如验证码刷新较快，提前启动常驻 OCR 服务：
+
+```bash
+python3 scripts/captcha_ocr.py --serve --port 18765
+```
+
+3. 刷新或截取当前验证码图片后，立即识别：
+
+```bash
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
+```
+
+4. 识别结果返回后，不要再执行 `take_snapshot` 或长时间等待；用同一次 `evaluate_script` 完成填入验证码和点击提交。
+
+```text
+MCP: evaluate_script
+  function: |
+    () => {
+      const code = "<OCR识别结果>";
+      const input = document.querySelector("#myCode1");
+      if (!input) return { ok: false, reason: "未找到验证码输入框 #myCode1" };
+      input.value = code;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      const submit = document.querySelector("#subForm");
+      if (!submit) return { ok: false, reason: "未找到提交按钮 #subForm" };
+      submit.click();
+      return { ok: true, code };
+    }
+```
+
+这样可以避免“识别还没填入，验证码已经刷新”的问题。验证码错误时，重新截图当前验证码并重试，不复用旧结果。
+
 提交成功后提取 CNVD-ID：
 
 ```
@@ -304,7 +342,7 @@ MCP: evaluate_script
 
 ```bash
 python3 scripts/publish_submission_zip.py \
-  "<CNVD材料目录>/form_context.json" \
+  "/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json" \
   --platform-id "<CNVD-ID>" \
   --notify
 ```

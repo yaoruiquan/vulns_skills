@@ -39,6 +39,7 @@ EOF
 chmod +x "${SKILL_ROOT}/scripts/start-chrome-debug.sh"
 chmod +x "${SKILL_ROOT}/scripts/chrome-devtools-mcp-wrapper.sh"
 chmod +x "${SKILL_ROOT}/scripts/extract_vuln_data.py"
+chmod +x "${SKILL_ROOT}/scripts/prepare_form_context.py"
 chmod +x "${SKILL_ROOT}/scripts/captcha_ocr.py"
 chmod +x "${SKILL_ROOT}/scripts/dingtalk_notify.py"
 

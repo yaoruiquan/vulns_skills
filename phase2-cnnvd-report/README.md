@@ -43,6 +43,7 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 | `CNNVD_USERNAME` | CNNVD 登录用户名 | `user@example.com` |
 | `CNNVD_PASSWORD` | CNNVD 登录密码 | `your_password` |
 | `VULNS_DATA_DIR` | 漏洞数据根目录，包含 DAS-ID 文件夹 | `/path/to/vulns/date` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts` |
 | `SUMMARY_TABLE_PATH` | 漏洞汇总表 xlsx 路径 | `/path/to/漏洞汇总表.xlsx` |
 | `COMPANY_NAME` | 技术支持单位名称 | `杭州安恒信息技术股份有限公司` |
 | `DEFAULT_CONTACT_PHONE` | 默认联系电话 | `15700082275` |
@@ -54,7 +55,18 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 | `REPORT_UPLOAD_REMOTE_DIR` | CNNVD zip 远端存放目录 | `/root/msrc-report-downloads/cnnvd-submissions` |
 | `REPORT_DOWNLOAD_BASE_URL` | CNNVD zip 下载 URL 根路径 | `http://10.50.10.29:8080/download/msrc/cnnvd-submissions` |
 
-### 4. 启动专用浏览器
+### 4. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnnvd-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `cnnvd-chrome` 连接本 skill 的 `9333` 端口和 `cnnvd-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 5. 启动专用浏览器
 
 ```bash
 ./scripts/start-chrome-debug.sh
@@ -66,7 +78,7 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 - `seed-default`：复制日常 Chrome profile 快照，适合复用登录态。
 - `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9333/json/version
@@ -99,11 +111,15 @@ cd /Users/yao/.claude/skills/phase2-cnnvd-report
 curl -s http://127.0.0.1:9333/json/version
 python3 scripts/prepare_form_context.py "/path/to/DAS-T105966-xxx" --entity-description "产品简介..." --verification "验证过程摘要..."
 python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/captcha_ocr.py --serve --port 18765
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
 python3 scripts/dingtalk_notify.py --title "监管上报 CNNVD 上报完成" --status success --text "编号：CNNVD-202604-XXXX\n材料已提交"
-python3 scripts/publish_submission_zip.py "/path/to/CNNVD-xxx/form_context.json" --platform-id "CNNVD-202604-XXXX" --notify
+python3 scripts/publish_submission_zip.py "/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json" --platform-id "CNNVD-202604-XXXX" --notify
 ```
 
-`extract_vuln_data.py` 只作为 `prepare_form_context.py` 的底层提取工具；浏览器填表前必须以 `form_context.json` 为准。
+`extract_vuln_data.py` 只作为 `prepare_form_context.py` 的底层提取工具；浏览器填表前必须以 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` 为准。运行时 JSON 不写入 CNNVD 提交材料目录。
+
+验证码刷新较快时，先启动 `captcha_ocr.py --serve` 常驻 OCR 服务，提交前最后一步截图验证码并走 `--server-url` 识别；识别后不要再 `take_snapshot`，直接填入并提交。
 
 更新本地汇总表：
 
@@ -147,7 +163,7 @@ http://10.50.10.29:8080/download/msrc/cnnvd-submissions/YYYY-MM/DAS-ID/CNNVD-xxx
 ## 工作流程
 
 1. 准备本地漏洞材料、验证视频和附件。
-2. 数据准备阶段运行 `prepare_form_context.py` 生成 `form_context.json`；websearch 补齐受影响实体描述，并把 Word 中的详细验证过程总结压缩为一段文字。
+2. 数据准备阶段运行 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`；websearch 补齐受影响实体描述，并把 Word 中的详细验证过程总结压缩为一段文字。
 3. 启动 skill 专用浏览器并确认 MCP 可用。
 4. 打开 CNNVD、登录并进入通用型漏洞报送。
 5. 第 1 页只处理必填项；必填下拉框只选择漏洞类型、漏洞自评级、受影响实体分类。
@@ -156,7 +172,7 @@ http://10.50.10.29:8080/download/msrc/cnnvd-submissions/YYYY-MM/DAS-ID/CNNVD-xxx
 8. 提交后获取 CNNVD-ID，并按需运行 `update_summary.py`。
 9. 如已配置 `DINGTALK_WEBHOOK`，运行 `publish_submission_zip.py <form_context.json> --platform-id <CNNVD-ID> --notify`，上传单漏洞 CNNVD zip 并推送包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和下载链接的钉钉通知。
 
-进入浏览器阶段后，只读取 `form_context.json`。第 2 页和第 3 页不要重新运行提取脚本；第 2 页“漏洞描述或简介”只填 255 字以内的 `description`，不要改用 `description_full`。第 3 页漏洞验证阶段也不要再跑 Word 提取脚本或重新总结，只填已有的 `FormContext.verification`。
+进入浏览器阶段后，只读取 `/tmp` 下的 `form_context.json`。第 2 页和第 3 页不要重新运行提取脚本；第 2 页“漏洞描述或简介”只填 255 字以内的 `description`，不要改用 `description_full`。第 3 页漏洞验证阶段也不要再跑 Word 提取脚本或重新总结，只填已有的 `FormContext.verification`。
 
 遇到下拉框判断不确定时，先查 `references/dropdown-options.md`，不要在页面里反复展开后再临时判断。级联下拉要点击最终叶子选项前面的圆圈/单选按钮完成选择，不要只点击文字，也不要按 Escape 关闭。
 
@@ -226,7 +242,7 @@ curl -s http://127.0.0.1:9333/json/version
 
 ## 多浏览器 MCP 并发
 
-各 skill 的端口/profile/MCP server 名必须独立运行。本 skill 默认使用唯一名称：
+各 skill 的端口/profile/MCP server 名必须独立运行。后续新增浏览器型 skill 时，也必须分配唯一端口、唯一 Chrome profile、唯一 MCP server 名。本 skill 默认使用唯一名称：
 
 ```bash
 claude mcp add cnnvd-chrome -- /Users/yao/.claude/skills/phase2-cnnvd-report/scripts/chrome-devtools-mcp-wrapper.sh

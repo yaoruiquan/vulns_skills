@@ -22,40 +22,47 @@ MCP: list_pages
 
 ## Step 1: 准备数据
 
-### 1.1 提取漏洞数据
+### 1.1 生成 `form_context.json`
 
 ```bash
-python3 scripts/extract_vuln_data.py --docx-path "<具体 docx 路径>"
+python3 scripts/prepare_form_context.py --docx-path "<具体 docx 路径>"
 # 或
-python3 scripts/extract_vuln_data.py --input-path "<具体 DAS 目录>"
+python3 scripts/prepare_form_context.py --input-path "<具体 DAS 目录>"
 # 或兼容旧用法
-python3 scripts/extract_vuln_data.py <DAS-ID> --data-dir "<数据根目录>"
+python3 scripts/prepare_form_context.py <DAS-ID> --data-dir "<数据根目录>"
 ```
+
+默认输出到 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。运行时 JSON 不写入 NCC/CNVD/CNNVD 提交材料目录；如需指定其他位置，使用 `--output`。
 
 输出示例：
 
 ```json
 {
-  "platform": "NCC",
-  "das_id": "DAS-T106003",
-  "material_dir": "/path/to/CNVD-材料目录",
-  "material_source": "CNVD",
-  "title": "7z系统WIM格式解析器模块存在内存缓冲区操作限制不当漏洞",
-  "description": "经恒脑AI代码审计智能体分析：7z WIM格式解析器递归调用无深度限制导致栈溢出",
-  "vuln_type": "二进制",
-  "target_type": "应用程序",
-  "unit_name": "其他",
-  "affected_product": "7z<=26.00",
-  "version": "7z<=26.00",
-  "url": "http://none",
-  "docx_path": "/path/to/report.docx",
-  "upload_zip_path": "/path/to/poc/example.zip",
-  "screenshot_paths": [
-    "/path/to/poc验证图片/example.png"
-  ],
-  "video_paths": [
-    "/path/to/poc验证视频/example.mp4"
-  ]
+  "ok": true,
+  "output": "/tmp/vulns-skills/phase2-ncc-report/form-contexts/2026-04/DAS-T106003/form_context.json",
+  "context": {
+    "platform": "NCC",
+    "das_id": "DAS-T106003",
+    "material_dir": "/path/to/CNVD-材料目录",
+    "material_source": "CNVD",
+    "title": "7z系统WIM格式解析器模块存在内存缓冲区操作限制不当漏洞",
+    "description": "经恒脑AI代码审计智能体分析：7z WIM格式解析器递归调用无深度限制导致栈溢出",
+    "vuln_type": "二进制",
+    "target_type": "应用程序",
+    "unit_name": "其他",
+    "affected_product": "7z<=26.00",
+    "version": "7z<=26.00",
+    "url": "http://none",
+    "docx_path": "/path/to/report.docx",
+    "upload_zip_path": "/path/to/poc/example.zip",
+    "screenshot_paths": [
+      "/path/to/poc验证图片/example.png"
+    ],
+    "video_paths": [
+      "/path/to/poc验证视频/example.mp4"
+    ],
+    "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；禁止重新运行 Word 提取脚本。"
+  }
 }
 ```
 
@@ -64,7 +71,7 @@ python3 scripts/extract_vuln_data.py <DAS-ID> --data-dir "<数据根目录>"
 第一版按当前约定这样用：
 
 - 以 `docx` 作为信息提取输入
-- 以 `CNVD` 材料目录下的 `poc/*.zip` 作为优先上传附件
+- 以 `form_context.json` 中的 `upload_zip_path` 作为优先上传附件
 - 页面若支持多文件，再补充 `docx / 截图 / 视频`
 
 ## Step 2: 登录并进入填表页
@@ -112,14 +119,14 @@ MCP: take_snapshot
 
 ## Step 4: 填写表单
 
-按 [field-mapping.md](field-mapping.md) 使用提取数据填表。原则：
+按 [field-mapping.md](field-mapping.md) 使用 `form_context.json` 填表。原则：
 
 - `是否为原创漏洞` 固定选“是”。
 - `发现日期` 不直接拿 `提交日期` 硬填。
 - `漏洞类型` 由页面联动逻辑处理；未知的动态下拉字段统一选“其他”。
 - 只有 `影响对象` 和 `漏洞详细分类` 两个下拉框需要按业务值精确操作。
 - `影响对象` 优先根据 `target_type` 选择。
-- `漏洞厂商 / 影响组件 / 影响版本 / 漏洞名称 / 漏洞 URL / 漏洞描述` 直接使用提取值。
+- `漏洞厂商 / 影响组件 / 影响版本 / 漏洞名称 / 漏洞 URL / 漏洞描述` 直接使用 `form_context.json` 中的固化值。
 - `漏洞危害` 优先使用 `impact`；如果材料没有单独危害字段，人工提炼关键危害结论。
 - `修复方案` 先选页面单选项，再把解决方案文本写入说明框。
 - 平台必填但材料缺失时暂停，不要凭空编写。
@@ -196,6 +203,8 @@ async function selectElementUiByLabel(labelText, wantedText, fallbackText = '其
 await selectElementUiByLabel('影响对象', '<target_type>', '其他');
 await selectElementUiByLabel('漏洞详细分类', '<漏洞详细分类>', '其他');
 ```
+
+进入浏览器阶段后，不要再运行 `extract_vuln_data.py`；如果发现字段不完整，回到 Step 1 重新生成 `form_context.json`。
 
 ### 4.2 动态新增必填字段规则
 

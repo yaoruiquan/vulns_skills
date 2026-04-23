@@ -22,9 +22,11 @@
 
 这些字段名已经确认，但实际下拉选项值和 MCP `uid` 仍需用运行时快照确定。
 
-## 2. `extract_vuln_data.py` 输出字段
+## 2. `form_context.json` 字段
 
-| 输出字段 | docx 来源 | 说明 |
+浏览器填表阶段只读取 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。`extract_vuln_data.py` 是底层提取脚本，不直接作为浏览器阶段的数据源；运行时 JSON 不写入正式提交材料目录。
+
+| 字段 | docx 来源 | 说明 |
 |----------|-----------|------|
 | `title` | `漏洞名称` | 对应页面“漏洞名称” |
 | `description` | `漏洞描述`、`漏洞简介` | 对应页面“漏洞描述” |

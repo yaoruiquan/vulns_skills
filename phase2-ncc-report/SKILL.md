@@ -27,6 +27,7 @@ vim .env
 |----------|------|-----------|
 | `NCC_PLATFORM_URL` | NCC 平台管理中心地址 | `https://www.nccsec.cn/company-center/manage-center` |
 | `VULN_DATA_DIR` | 漏洞数据父目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-ncc-report/form-contexts` |
 | `PYTHON_PROJECT_PATH` | Python 项目路径，可选，用于导入共享模块 | `/path/to/your/python/project` |
 | `NCC_USERNAME` | NCC 平台登录账号，可选 | 空 |
 | `NCC_PASSWORD` | NCC 平台登录密码，可选 | 空 |
@@ -39,7 +40,18 @@ vim .env
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
-### 3. 浏览器配置
+### 3. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-ncc-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `ncc-chrome` 连接本 skill 的 `9334` 端口和 `ncc-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 4. 浏览器配置
 
 本 skill 默认使用：
 
@@ -58,7 +70,7 @@ curl -s http://127.0.0.1:9334/json/version
 - `seed-default`：复制日常 Chrome profile 快照，适合复用登录态。
 - `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
 
-### 4. MCP 配置
+### 5. MCP 配置
 
 如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `ncc-chrome`。
 
@@ -70,7 +82,7 @@ claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts
 
 本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9334/json/version
@@ -84,11 +96,11 @@ claude mcp get ncc-chrome
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 用 `extract_vuln_data.py` 从具体 `DAS` 目录或 `docx` 提取 NCC 字段 |
+| 1 | 准备数据 | 用 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` |
 | 2 | 登录并进入填表页 | 打开 `NCC_PLATFORM_URL`，必要时完成企业登录，再从右上角“提交漏洞”进入表单 |
 | 3 | 确认表单 | 用 MCP 快照确认表单字段、下拉值和上传控件 |
-| 4 | 填写表单 | 按 `references/field-mapping.md` 填写漏洞信息 |
-| 5 | 上传附件 | 第一版优先上传 `upload_zip_path`，如页面支持再补充 `docx/截图/视频` |
+| 4 | 填写表单 | 浏览器阶段只读取 `form_context.json`，按 `references/field-mapping.md` 填写漏洞信息 |
+| 5 | 上传附件 | 第一版优先上传 `form_context.json` 中的 `upload_zip_path`，如页面支持再补充 `docx/截图/视频` |
 | 6 | 提交验证 | 点击提交后，人工完成拖拽拼图验证 |
 | 7 | 记录结果 | 读取成功页中的 `NCC-xxxx` 编号 |
 | 8 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
@@ -105,6 +117,7 @@ claude mcp get ncc-chrome
 | `scripts/start-chrome-debug.sh` | 启动本 skill 专用 Chrome |
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 `DAS` 目录或 `docx` 提取 NCC 上报字段，并识别 zip/截图/视频附件 |
+| `scripts/prepare_form_context.py` | 生成浏览器填表阶段唯一读取的 NCC `form_context.json` |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人，支持关键词和链接 |
 
@@ -127,6 +140,7 @@ claude mcp get ncc-chrome
 - NCC 平台账号密码明文存储有风险，不要复制或分享 `.env`。
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - `.env` 里只保存父目录，不保存具体某一次的 `docx` 路径；实际运行时通过 `--input-path` 或 `--docx-path` 传入。
+- Step 1 必须先生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
 - 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
 - 第一次开发或平台页面变化时，必须先用 MCP `take_snapshot` 更新 `references/selectors.md`，再执行填表。
 - 当前已知登录页没有普通验证码；点击提交后会出现拖拽拼图验证，第一版由人工接管。

@@ -6,12 +6,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_cnvd_data, extract_fields_from_docx, find_docx_path
+
+
+DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
+    "FORM_CONTEXT_DIR",
+    "/tmp/vulns-skills/phase2-cnvd-report/form-contexts",
+)
 
 
 def extract_das_id_from_name(name: str) -> str:
@@ -175,11 +182,19 @@ def build_context(args: argparse.Namespace) -> dict:
     return context
 
 
+def default_context_output(context: dict) -> Path:
+    """默认将运行时 JSON 写入 /tmp，避免污染 CNVD 提交材料目录。"""
+    generated_at = context.get("generated_at") or datetime.now().isoformat(timespec="seconds")
+    month = generated_at[:7]
+    das_id = context.get("das_id") or "unknown-das"
+    return Path(DEFAULT_FORM_CONTEXT_DIR).expanduser() / month / das_id / "form_context.json"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="准备 CNVD 表单上下文 JSON")
     parser.add_argument("target", help="DAS-ID、DAS 目录、CNVD 目录或 CNVD docx 路径")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR, help="漏洞数据根目录")
-    parser.add_argument("--output", default="", help="输出 form_context.json 路径；默认写入 CNVD 材料目录")
+    parser.add_argument("--output", default="", help="输出 form_context.json 路径；默认写入 /tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/")
     return parser.parse_args()
 
 
@@ -190,8 +205,9 @@ def main() -> int:
         print(json.dumps(context, ensure_ascii=False, indent=2))
         return 1
 
-    output = Path(args.output).expanduser() if args.output else Path(context["folder_path"]) / "form_context.json"
+    output = Path(args.output).expanduser() if args.output else default_context_output(context)
     output.parent.mkdir(parents=True, exist_ok=True)
+    context["context_file_path"] = str(output)
     output.write_text(json.dumps(context, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(json.dumps({

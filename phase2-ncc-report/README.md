@@ -41,6 +41,7 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 |----------|------|-----------|
 | `NCC_PLATFORM_URL` | NCC 平台管理中心地址 | `https://www.nccsec.cn/company-center/manage-center` |
 | `VULN_DATA_DIR` | 漏洞数据根目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-ncc-report/form-contexts` |
 | `PYTHON_PROJECT_PATH` | Python 项目路径，可选 | `/path/to/your/python/project` |
 | `NCC_USERNAME` | NCC 平台登录账号，可选 | 空 |
 | `NCC_PASSWORD` | NCC 平台登录密码，可选 | 空 |
@@ -53,7 +54,18 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 
 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME` 仍兼容旧配置，但新用户应使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
-### 4. 启动专用浏览器
+### 4. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-ncc-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `ncc-chrome` 连接本 skill 的 `9334` 端口和 `ncc-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 5. 启动专用浏览器
 
 ```bash
 ./scripts/start-chrome-debug.sh
@@ -65,7 +77,7 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 - `seed-default`：复制日常 Chrome profile 快照，适合复用登录态。
 - `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9334/json/version
@@ -96,13 +108,17 @@ cd /Users/yao/.claude/skills/phase2-ncc-report
 ./scripts/setup.sh
 ./scripts/start-chrome-debug.sh
 curl -s http://127.0.0.1:9334/json/version
-python3 scripts/extract_vuln_data.py --input-path "/path/to/DAS-T106003-漏洞目录"
-python3 scripts/extract_vuln_data.py --docx-path "/path/to/report.docx"
+python3 scripts/prepare_form_context.py --input-path "/path/to/DAS-T106003-漏洞目录"
+python3 scripts/prepare_form_context.py --docx-path "/path/to/report.docx"
 python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/captcha_ocr.py --serve --port 18765
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
 python3 scripts/dingtalk_notify.py --title "NCC 平台上报完成" --status success --text "DAS-ID：DAS-T106003\nNCC编号：NCC-2026-04947"
 ```
 
-提取脚本会优先选择 `CNVD-` 材料目录，并自动返回：
+浏览器填表前先运行 `scripts/prepare_form_context.py`，默认生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。`extract_vuln_data.py` 只作为底层提取工具；进入浏览器阶段后只读取这个 JSON，不再临时提取 Word，也不要把运行时 JSON 放进正式提交材料目录。
+
+`prepare_form_context.py` 会优先选择 `CNVD-` 材料目录，并自动固化：
 
 - `docx_path`
 - `upload_zip_path`
@@ -126,12 +142,12 @@ python3 scripts/dingtalk_notify.py \
 ## 工作流程
 
 1. 准备本地漏洞材料；`.env` 只维护父目录。
-2. 运行 `extract_vuln_data.py`，把具体 `DAS` 目录或 `docx` 路径传进去。
+2. 运行 `prepare_form_context.py`，把具体 `DAS` 目录或 `docx` 路径传进去，生成 `/tmp` 下的 `form_context.json`。
 3. 启动 skill 专用浏览器并确认 MCP 可用。
 4. 打开 `NCC_PLATFORM_URL`，如果未登录则走“企业”登录页。
 5. 登录成功后，在右上角“提交漏洞”下拉菜单进入填表页。
 6. 用 MCP 快照确认字段 `uid` 和下拉值。
-7. 填写漏洞信息，第一版优先上传 `upload_zip_path`。
+7. 填写漏洞信息，第一版优先上传 `form_context.json` 中的 `upload_zip_path`。
 8. 点击提交后，人工完成拖拽拼图验证。
 9. 成功页记录 `NCC-xxxx`。
 10. 如已配置 `DINGTALK_WEBHOOK`，可推送钉钉通知。
@@ -151,6 +167,7 @@ phase2-ncc-report/
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── start-chrome-debug.sh
 │   ├── extract_vuln_data.py
+│   ├── prepare_form_context.py
 │   ├── captcha_ocr.py
 │   └── dingtalk_notify.py
 └── references/
@@ -211,7 +228,7 @@ curl -s http://127.0.0.1:9334/json/version
 
 ## 多浏览器 MCP 并发
 
-各 skill 的端口/profile/MCP server 名必须独立运行。本 skill 默认使用唯一名称：
+各 skill 的端口/profile/MCP server 名必须独立运行。后续新增浏览器型 skill 时，也必须分配唯一端口、唯一 Chrome profile、唯一 MCP server 名。本 skill 默认使用唯一名称：
 
 ```bash
 claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh

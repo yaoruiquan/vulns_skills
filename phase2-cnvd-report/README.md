@@ -38,6 +38,7 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 | 环境变量 | 说明 | 默认/示例 |
 |----------|------|-----------|
 | `VULN_DATA_DIR` | 漏洞数据根目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-cnvd-report/form-contexts` |
 | `PYTHON_PROJECT_PATH` | Python 项目路径，可选 | `/path/to/your/python/project` |
 | `CNVD_EMAIL` | CNVD 登录邮箱，可选 | 空 |
 | `CNVD_PASSWORD` | CNVD 登录密码，可选 | 空 |
@@ -51,7 +52,18 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 
 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME` 仍兼容旧配置，但新用户应使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
-### 4. 启动专用浏览器
+### 4. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnvd-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `cnvd-chrome` 连接本 skill 的 `9332` 端口和 `cnvd-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 5. 启动专用浏览器
 
 ```bash
 ./scripts/start-chrome-debug.sh
@@ -69,7 +81,7 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 ./scripts/start-chrome-debug.sh seed-default
 ```
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9332/json/version
@@ -100,14 +112,17 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 ./scripts/setup.sh
 ./scripts/start-chrome-debug.sh
 curl -s http://127.0.0.1:9332/json/version
-python3 scripts/extract_vuln_data.py DAS-T105966 --platform CNVD --data-dir "/path/to/data"
 python3 scripts/prepare_form_context.py DAS-T105966 --data-dir "/path/to/data"
 python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/captcha_ocr.py --serve --port 18765
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
 python3 scripts/dingtalk_notify.py --title "监管上报 CNVD 上报完成" --status success --text "编号：CNVD-2026-XXXX\n材料已提交"
-python3 scripts/publish_submission_zip.py "/path/to/CNVD-xxx/form_context.json" --platform-id "CNVD-2026-XXXX" --notify
+python3 scripts/publish_submission_zip.py "/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json" --platform-id "CNVD-2026-XXXX" --notify
 ```
 
-浏览器填表前先运行 `scripts/prepare_form_context.py`，它会在 `CNVD-xxx/form_context.json` 中固化所有填表字段、标题拆分结果和附件预检查结果。附件必须使用 `attachment_zip_path` 指向的 CNVD 平台原始整包 zip；不要重新压缩 docx 目录。
+浏览器填表前先运行 `scripts/prepare_form_context.py`，它会在 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` 中固化所有填表字段、标题拆分结果和附件预检查结果。附件必须使用 `attachment_zip_path` 指向的 CNVD 平台原始整包 zip；不要重新压缩 docx 目录，也不要把运行时 JSON 放进 CNVD 提交材料目录。
+
+验证码刷新较快时，先启动 `captcha_ocr.py --serve` 常驻 OCR 服务，提交前最后一步截图验证码并走 `--server-url` 识别；识别后不要再 `take_snapshot`，直接填入并提交。
 
 ## 钉钉机器人通知
 
@@ -138,7 +153,7 @@ http://10.50.10.29:8080/download/msrc/cnvd-submissions/YYYY-MM/DAS-ID/CNVD-xxx.z
 ## 工作流程
 
 1. 准备本地漏洞材料和附件目录。
-2. 运行 `prepare_form_context.py` 生成 `CNVD-xxx/form_context.json`。
+2. 运行 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。
 3. 启动 skill 专用浏览器并确认 MCP 可用。
 4. 打开 CNVD、登录并进入漏洞上报页。
 5. 浏览器阶段只读取 `form_context.json` 填写通用型漏洞表单；基本信息“是否公开”选择“否”，漏洞描述不带 `经恒脑AI代码审计智能体分析：` 前缀，并上传 CNVD 原始整包 zip。
@@ -213,7 +228,7 @@ curl -s http://127.0.0.1:9332/json/version
 
 ## 多浏览器 MCP 并发
 
-各 skill 的端口/profile/MCP server 名必须独立运行。本 skill 默认使用唯一名称：
+各 skill 的端口/profile/MCP server 名必须独立运行。后续新增浏览器型 skill 时，也必须分配唯一端口、唯一 Chrome profile、唯一 MCP server 名。本 skill 默认使用唯一名称：
 
 ```bash
 claude mcp add cnvd-chrome -- /Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh

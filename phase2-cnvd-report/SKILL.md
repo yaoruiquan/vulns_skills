@@ -21,6 +21,7 @@ vim .env
 | 环境变量 | 说明 | 默认/示例 |
 |----------|------|-----------|
 | `VULN_DATA_DIR` | 漏洞数据根目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-cnvd-report/form-contexts` |
 | `PYTHON_PROJECT_PATH` | Python 项目路径，可选，用于导入共享模块 | `/path/to/your/python/project` |
 | `CNVD_EMAIL` | CNVD 登录邮箱，可选 | 空 |
 | `CNVD_PASSWORD` | CNVD 登录密码，可选 | 空 |
@@ -35,7 +36,18 @@ vim .env
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
-### 3. 浏览器配置
+### 3. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnvd-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `cnvd-chrome` 连接本 skill 的 `9332` 端口和 `cnvd-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 4. 浏览器配置
 
 本 skill 默认使用：
 
@@ -54,7 +66,7 @@ curl -s http://127.0.0.1:9332/json/version
 - `seed-default`：复制日常 Chrome profile 快照，适合绕过 CNVD 登录态或 Cloudflare 干扰。
 - `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
 
-### 4. MCP 配置
+### 5. MCP 配置
 
 如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `cnvd-chrome`。
 
@@ -66,7 +78,7 @@ claude mcp add cnvd-chrome -- /Users/yao/.claude/skills/phase2-cnvd-report/scrip
 
 本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9332/json/version
@@ -80,11 +92,11 @@ claude mcp get cnvd-chrome
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 用 `prepare_form_context.py` 生成 `CNVD-xxx/form_context.json` |
+| 1 | 准备数据 | 用 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` |
 | 2 | 导航表单 | 打开 CNVD、登录、进入漏洞上报表单 |
 | 3 | 填写表单 | 浏览器阶段只读取 `form_context.json`，填写厂商、产品、版本和漏洞详情 |
 | 4 | 上传附件 | 上传 `form_context.json` 中 `attachment_zip_path` 指向的 CNVD 原始整包 zip |
-| 5 | 验证提交 | OCR 识别验证码，提交后提取并记录 `CNVD-xxxx` 编号 |
+| 5 | 验证提交 | 提交前最后一步 OCR 识别验证码；验证码刷新快时使用 `captcha_ocr.py --serve` 常驻服务加速，提交后提取并记录 `CNVD-xxxx` 编号 |
 | 6 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时上传单漏洞 CNVD zip，并推送漏洞名称、`DAS-ID`、`CNVD 编号` 和下载链接 |
 
 详细步骤见 `references/workflow.md`。
@@ -123,7 +135,7 @@ claude mcp get cnvd-chrome
 - 钉钉通知是收尾动作；提交成功后优先使用 `publish_submission_zip.py <form_context.json> --platform-id <CNVD-ID> --notify`，消息必须包含漏洞名称、`DAS-ID`、`CNVD 编号` 和附件下载链接。
 - `publish_submission_zip.py` 只上传单个漏洞的 CNVD 原始整包 zip，不上传整个批次目录，也不重新压缩。
 - 优先使用 `seed-default` 复用登录态；`live-default` 只在必要时使用。
-- 浏览器阶段只能读取 `CNVD-xxx/form_context.json`；不要在第二阶段重新运行提取脚本、重新压缩目录或重新判断标题。
+- 浏览器阶段只能读取 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/.../form_context.json`；不要在第二阶段重新运行提取脚本、重新压缩目录或重新判断标题。
 - `prepare_form_context.py` 会固化 `title_input` 和 `title_final_expected`；页面填 `title_input`，提交后用 `title_final_expected` 校验最终标题。
 - `prepare_form_context.py` 会检查 `attachment_zip_path`；CNVD 上报必须上传该原始整包 zip，不要重新压缩 docx 目录。
 - 基本信息“是否公开”必须选择“否”；漏洞描述不要带 `经恒脑AI代码审计智能体分析：` 前缀。

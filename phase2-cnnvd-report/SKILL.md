@@ -23,6 +23,7 @@ vim .env
 | `CNNVD_USERNAME` | CNNVD 登录用户名 | `user@example.com` |
 | `CNNVD_PASSWORD` | CNNVD 登录密码 | `your_password` |
 | `VULNS_DATA_DIR` | 漏洞数据根目录，包含 DAS-ID 文件夹 | `/path/to/vulns/date` |
+| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts` |
 | `SUMMARY_TABLE_PATH` | 漏洞汇总表 xlsx 路径 | `/path/to/漏洞汇总表.xlsx` |
 | `COMPANY_NAME` | 技术支持单位名称 | `杭州安恒信息技术股份有限公司` |
 | `DEFAULT_CONTACT_PHONE` | 默认联系电话 | `15700082275` |
@@ -37,7 +38,18 @@ vim .env
 
 `.env.template` 是历史模板，当前新用户优先使用 `.env.example`。
 
-### 3. 浏览器配置
+### 3. 推荐启动方式
+
+如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
+
+```bash
+cd /Users/yao/.claude/skills/phase2-cnnvd-report
+claude
+```
+
+这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `cnnvd-chrome` 连接本 skill 的 `9333` 端口和 `cnnvd-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+
+### 4. 浏览器配置
 
 本 skill 默认使用：
 
@@ -56,7 +68,7 @@ curl -s http://127.0.0.1:9333/json/version
 - `seed-default`：复制日常 Chrome profile 快照，适合复用登录态。
 - `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
 
-### 4. MCP 配置
+### 5. MCP 配置
 
 如果从本 skill 目录启动 Claude Code，`.mcp.json` 会作为项目配置使用，server 名为 `cnnvd-chrome`。
 
@@ -68,7 +80,7 @@ claude mcp add cnnvd-chrome -- /Users/yao/.claude/skills/phase2-cnnvd-report/scr
 
 本 skill 的端口/profile/MCP server 名都独立于其他浏览器型 skill；不要把它注册成通用的 `chrome-devtools`，否则会覆盖或误连到其他 wrapper。
 
-### 5. 验证
+### 6. 验证
 
 ```bash
 curl -s http://127.0.0.1:9333/json/version
@@ -82,11 +94,11 @@ claude mcp get cnnvd-chrome
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 运行 `prepare_form_context.py` 生成 `form_context.json`；Word 提取、受影响实体描述、验证过程、附件和下拉值在此阶段定稿 |
+| 1 | 准备数据 | 运行 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`；Word 提取、受影响实体描述、验证过程、附件和下拉值在此阶段定稿 |
 | 2 | 导航登录 | 打开 CNNVD、登录、进入通用型漏洞报送 |
 | 3 | 基本信息 | 只处理必填项；必填下拉框为漏洞类型、漏洞自评级、受影响实体分类 |
 | 4 | 漏洞详情 | 只填写漏洞描述或简介、技术支持、技术支持联系电话 |
-| 5 | 漏洞验证 | 填写单段验证过程，上传 `verification_video_path` 和 `poc_file_path` |
+| 5 | 漏洞验证 | 填写单段验证过程，上传 `verification_video_path` 和 `poc_file_path`；如遇验证码，提交前最后一步识别，刷新快时使用 `captcha_ocr.py --serve` 常驻服务 |
 | 6 | 提交记录 | 提交后获取 `CNNVD-ID`，并按需更新汇总表 |
 | 7 | 钉钉通知 | 已配置 `DINGTALK_WEBHOOK` 时上传单漏洞 CNNVD zip，并推送漏洞名称、`DAS-ID`、`CNNVD 编号` 和下载链接 |
 
@@ -133,7 +145,7 @@ claude mcp get cnnvd-chrome
 - 钉钉通知是收尾动作；提交成功后优先使用 `publish_submission_zip.py <form_context.json> --platform-id <CNNVD-ID> --notify`，消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。
 - `publish_submission_zip.py` 只上传单个漏洞的 CNNVD 原始整包 zip，不上传整个批次目录，也不重新压缩。
 - CNNVD 表单只填写带 danger/红色必填标记的字段；非必填字段不要为了补充信息而反复操作下拉框。
-- Step 1 必须生成 `form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
+- Step 1 必须生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
 - `prepare_form_context.py` 负责整理完整 `FormContext`，包括 websearch 得到的受影响实体描述和总结压缩后的漏洞验证过程。
 - 第 3 页漏洞验证阶段禁止再跑 Word 提取脚本；只填 `FormContext.verification`。如果为空，回到 Step 1 补齐。
 - 第 1 页只操作三个必填下拉框：漏洞类型、漏洞自评级、受影响实体分类；遇到选项判断先查 `references/dropdown-options.md`。
