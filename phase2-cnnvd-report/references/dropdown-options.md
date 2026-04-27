@@ -21,7 +21,7 @@
 
 执行顺序：
 
-1. 先运行一次 `extract_vuln_data.py`，拿到 `vuln_type`、`risk_level`、`affected_entity_category`
+1. 先运行一次 `prepare_form_context.py`，直接读取 `dropdown_plan.vuln_type_path`、`dropdown_plan.risk_level`、`dropdown_plan.affected_entity_category`
 2. 遇到下拉框先查本表
 3. 能直接命中就直接选
 4. 不能命中再按兜底规则处理

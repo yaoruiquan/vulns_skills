@@ -1,3 +1,21 @@
+# 产品安全研究部 AI-Skills
+
+> 赋能安全研究，探索AI驱动的下一代安全能力
+
+## 🧠 关于本仓库
+
+本仓库由 **产品安全研究部** 维护，聚焦于 **人工智能与安全研究深度融合** 的实践沉淀。我们致力于探索利用大语言模型（LLM）、机器学习（ML）等 AI 技术，提升安全检测、漏洞分析、威胁情报、自动化攻防等方向的研究效率与创新边界。
+
+无论你是安全研究员、开发工程师，还是对 AI + Security 交叉领域感兴趣的探索者，这里都将为你提供可落地的代码、实验案例、研究思路和最佳实践。
+
+## 🎯 主要方向
+
+- **智能漏洞挖掘**：基于 LLM 的代码审计、Fuzzing 用例生成、污点分析辅助
+- **自动化逆向分析**：二进制理解、反编译代码注释、控制流/数据流智能分析
+- **威胁情报与态势感知**：非结构化情报信息抽取、IOC 自动化提炼、攻击链推理
+- **AI 安全评估**：模型鲁棒性测试、对抗样本生成、提示词注入检测
+- **安全运营自动化**：告警降噪、事件自动分类、响应剧本生成
+
 # phase2-cnvd-report
 
 通过 Chrome DevTools MCP 控制真实浏览器完成 CNVD 漏洞上报。
@@ -30,6 +48,8 @@ cd /Users/yao/.claude/skills/phase2-cnvd-report
 - 从 `.env.example` 创建 `.env`，已有 `.env` 不覆盖。
 - 生成指向当前目录 wrapper 的 `.mcp.json`。
 - 设置脚本可执行权限。
+
+所有 Python 脚本一律使用 `python3` 执行，不要使用 `python`。
 
 ### 3. 编辑 `.env`
 
@@ -120,9 +140,9 @@ python3 scripts/dingtalk_notify.py --title "监管上报 CNVD 上报完成" --st
 python3 scripts/publish_submission_zip.py "/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json" --platform-id "CNVD-2026-XXXX" --notify
 ```
 
-浏览器填表前先运行 `scripts/prepare_form_context.py`，它会在 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` 中固化所有填表字段、标题拆分结果和附件预检查结果。附件必须使用 `attachment_zip_path` 指向的 CNVD 平台原始整包 zip；不要重新压缩 docx 目录，也不要把运行时 JSON 放进 CNVD 提交材料目录。
+浏览器填表前先运行 `scripts/prepare_form_context.py`，它会在 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` 中固化所有填表字段、标题拆分结果、漏洞详情默认值、`dropdown_phase`、分页 `page_payloads`、OCR 配置和附件预检查结果。浏览器阶段只读取这些字段。附件必须使用 `attachment_zip_path` 指向的 CNVD 平台原始整包 zip；若材料目录里还没有 `CNVD-*.zip`，脚本会按单漏洞目录自动补建，不需要手工压缩。
 
-验证码刷新较快时，先启动 `captcha_ocr.py --serve` 常驻 OCR 服务，提交前最后一步截图验证码并走 `--server-url` 识别；识别后不要再 `take_snapshot`，直接填入并提交。
+验证码刷新较快时，先启动 `captcha_ocr.py --serve` 常驻 OCR 服务。优先直接使用 `form_context.json.ocr.preferred_server_url` / `ocr.recognize_command`；提交前最后一步先点击验证码图片刷新，再截图并走 `--server-url` 识别；如果识别失败，就把验证码图片在新标签页打开后再截图识别。识别后不要再 `take_snapshot`，直接填入并提交。
 
 ## 钉钉机器人通知
 
@@ -138,7 +158,7 @@ python3 scripts/dingtalk_notify.py \
 
 `--text` 支持命令行字面量 `\n`，脚本会转换为真实换行。真实 webhook 只放在 `.env`，不要写入 README 或提交到 Git。
 
-提交成功后推荐使用 `publish_submission_zip.py` 作为收尾动作，它只上传单个漏洞的 CNVD 原始整包 zip，并在钉钉 Markdown 中附带漏洞名称、`DAS-ID`、`CNVD 编号`、附件名、大小和下载链接。默认远端目录为：
+提交成功后推荐使用 `publish_submission_zip.py` 作为收尾动作，它只上传单个漏洞的 CNVD 原始整包 zip，并在钉钉 Markdown 中附带漏洞名称、`DAS-ID`、`CNVD 编号`、附件名、大小和下载链接。若本地还没有 `CNVD-*.zip`，脚本会自动补建。默认远端目录为：
 
 ```text
 /root/msrc-report-downloads/cnvd-submissions/YYYY-MM/DAS-ID/
@@ -156,7 +176,7 @@ http://10.50.10.29:8080/download/msrc/cnvd-submissions/YYYY-MM/DAS-ID/CNVD-xxx.z
 2. 运行 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。
 3. 启动 skill 专用浏览器并确认 MCP 可用。
 4. 打开 CNVD、登录并进入漏洞上报页。
-5. 浏览器阶段只读取 `form_context.json` 填写通用型漏洞表单；基本信息“是否公开”选择“否”，漏洞描述不带 `经恒脑AI代码审计智能体分析：` 前缀，并上传 CNVD 原始整包 zip。
+5. 浏览器阶段只读取 `form_context.json`。先只处理 `dropdown_phase` 中两个下拉框：`漏洞所属类型=form_type_label`、`漏洞类型=vuln_type`；等页面联动完成后，再按 `page_payloads.base_info`、`page_payloads.vendor_info`、`page_payloads.detail_info` 一次性填写其余字段。基本信息“是否公开”选择“否”。选择完“漏洞类型”后，漏洞详情里只继续填写 `description`，`漏洞URL` 固定填写 `http://test.com`，其余缺失必填项统一用“无”或“见附件”，不要再次读取 Word。
 6. 识别验证码、提交并提取 CNVD 编号。
 7. 如已配置 `DINGTALK_WEBHOOK`，运行 `publish_submission_zip.py <form_context.json> --platform-id <CNVD-ID> --notify`，上传单漏洞 CNVD zip 并推送包含漏洞名称、`DAS-ID`、`CNVD 编号` 和下载链接的钉钉通知。
 
@@ -174,6 +194,7 @@ phase2-cnvd-report/
 │   ├── setup.sh
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── start-chrome-debug.sh
+│   ├── compress_zip.py
 │   ├── extract_vuln_data.py
 │   ├── prepare_form_context.py
 │   ├── publish_submission_zip.py

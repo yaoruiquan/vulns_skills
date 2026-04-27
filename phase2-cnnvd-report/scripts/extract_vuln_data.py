@@ -46,7 +46,17 @@ def find_docx_path(das_id: str, platform: str, data_dir: str = DEFAULT_DATA_DIR)
 def extract_das_id_from_name(name: str) -> str:
     """从 DAS 目录名或文件名中提取 DAS-ID"""
     match = re.search(r"(DAS-[A-Z]?\d+)", name)
-    return match.group(1) if match else name
+    return match.group(1) if match else ""
+
+
+def extract_das_id_from_path(path: Path) -> str:
+    """从文件或目录路径各级名称中提取 DAS-ID。"""
+    candidates = [path.name, *[parent.name for parent in path.parents]]
+    for name in candidates:
+        das_id = extract_das_id_from_name(name)
+        if das_id:
+            return das_id
+    return ""
 
 
 def resolve_target(input_value: str, platform: str, data_dir: str) -> tuple[str, str, Optional[str]]:
@@ -56,14 +66,26 @@ def resolve_target(input_value: str, platform: str, data_dir: str) -> tuple[str,
         return input_value, data_dir, None
 
     if target.is_file() and target.suffix.lower() == ".docx":
-        das_id = extract_das_id_from_name(target.name or target.parent.name)
+        das_id = extract_das_id_from_path(target) or input_value
         return das_id, str(target.parent.parent), str(target)
 
     if target.is_dir():
-        das_id = extract_das_id_from_name(target.name)
+        das_id = extract_das_id_from_path(target) or target.name
+        # 如果传入的是平台子目录（如 CNNVD-xxx 或 CNVD-xxx），直接在其中查找 docx
+        if target.name.startswith(f"{platform}-"):
+            docx_files = [
+                path for path in target.iterdir()
+                if path.is_file() and path.suffix.lower() == ".docx" and not path.name.startswith(".")
+            ]
+            if docx_files:
+                doc_path = str(sorted(docx_files, key=lambda p: p.name)[0])
+                return das_id, str(target.parent), doc_path
+            return das_id, str(target.parent), None
+        # 如果传入的是 DAS 根目录（以 DAS- 开头）
         if target.name.startswith("DAS-"):
             doc_path = find_docx_path(das_id, platform, str(target.parent))
             return das_id, str(target.parent), doc_path
+        # 其他情况：传入的是批次目录，在其中查找 DAS 目录
         doc_path = find_docx_path(das_id, platform, str(target))
         return das_id, str(target), doc_path
 

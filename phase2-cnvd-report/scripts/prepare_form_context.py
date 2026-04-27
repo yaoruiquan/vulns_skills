@@ -19,12 +19,23 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnvd-report/form-contexts",
 )
+DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", "http://127.0.0.1:18765")
 
 
 def extract_das_id_from_name(name: str) -> str:
     """从目录名或文件名中提取 DAS-ID。"""
     match = re.search(r"(DAS-[A-Z]?\d+)", name)
-    return match.group(1) if match else name
+    return match.group(1) if match else ""
+
+
+def extract_das_id_from_path(path: Path) -> str:
+    """从文件或目录路径各级名称中提取 DAS-ID。"""
+    candidates = [path.name, *[parent.name for parent in path.parents]]
+    for name in candidates:
+        das_id = extract_das_id_from_name(name)
+        if das_id:
+            return das_id
+    return ""
 
 
 def resolve_target(input_value: str, data_dir: str) -> Tuple[str, str, Optional[str]]:
@@ -34,19 +45,19 @@ def resolve_target(input_value: str, data_dir: str) -> Tuple[str, str, Optional[
         return input_value, data_dir, None
 
     if target.is_file() and target.suffix.lower() == ".docx":
-        das_id = extract_das_id_from_name(target.name) or extract_das_id_from_name(target.parent.name)
+        das_id = extract_das_id_from_path(target) or input_value
         return das_id, str(target.parent.parent), str(target)
 
     if target.is_dir():
         if target.name.startswith("CNVD-"):
-            das_id = extract_das_id_from_name(target.parent.name)
+            das_id = extract_das_id_from_path(target) or target.parent.name
             docx_paths = sorted(
                 path for path in target.iterdir()
                 if path.is_file() and path.suffix.lower() == ".docx" and not path.name.startswith(".")
             )
             return das_id, str(target.parent.parent), str(docx_paths[0]) if docx_paths else None
 
-        das_id = extract_das_id_from_name(target.name)
+        das_id = extract_das_id_from_path(target) or target.name
         if target.name.startswith("DAS-"):
             doc_path = find_docx_path(das_id, "CNVD", str(target.parent))
             return das_id, str(target.parent), doc_path
@@ -80,6 +91,16 @@ def split_cnvd_title(title: str, vuln_type: str) -> dict:
     }
 
 
+def resolve_form_type(is_event: str) -> dict:
+    """将 is_event 统一成页面使用的漏洞所属类型。"""
+    value = str(is_event or "0").strip()
+    is_event_flag = value in {"1", "true", "True", "事件型漏洞", "事件型"}
+    return {
+        "form_type_value": "1" if is_event_flag else "0",
+        "form_type_label": "事件型漏洞" if is_event_flag else "通用型漏洞",
+    }
+
+
 def file_status(path_value: str) -> dict:
     """返回文件存在性和大小信息。"""
     path = Path(path_value) if path_value else None
@@ -103,6 +124,21 @@ def file_status(path_value: str) -> dict:
     }
 
 
+def soft_style_label(soft_style_id: str) -> str:
+    """将影响对象类型编码映射回页面下拉框中文。"""
+    mapping = {
+        "27": "操作系统",
+        "28": "应用程序",
+        "29": "WEB应用",
+        "30": "数据库",
+        "31": "网络设备",
+        "32": "安全产品",
+        "33": "智能设备",
+        "38": "工业控制",
+    }
+    return mapping.get(str(soft_style_id or "").strip(), "应用程序")
+
+
 def build_context(args: argparse.Namespace) -> dict:
     """构建完整 CNVD FormContext。"""
     das_id, resolved_data_dir, doc_path_override = resolve_target(args.target, args.data_dir)
@@ -112,7 +148,7 @@ def build_context(args: argparse.Namespace) -> dict:
         data = extract_cnvd_data(das_id, resolved_data_dir)
         if data.get("error"):
             # 允许直接传 docx/CNVD 目录时绕过 data_dir 扫描失败。
-            from extract_vuln_data import clean_cnvd_description, find_attachment_zip_path, map_cnvd_vuln_type, map_soft_style
+            from extract_vuln_data import clean_cnvd_description, find_attachment_zip_path, first_non_empty, map_cnvd_vuln_type, map_soft_style
 
             data = {
                 "das_id": das_id,
@@ -126,7 +162,7 @@ def build_context(args: argparse.Namespace) -> dict:
                 "soft_style_id": map_soft_style(fields.get("影响对象类型", "")),
                 "discoverer_name": fields.get("提交人员", ""),
                 "affected_product": fields.get("影响产品", ""),
-                "version": fields.get("影响版本", ""),
+                "version": first_non_empty(fields, "受影响实体版本号", "影响版本", "版本号"),
                 "folder_path": platform_dir,
                 "docx_path": doc_path_override,
                 "attachment_zip_path": find_attachment_zip_path(platform_dir, "CNVD"),
@@ -139,8 +175,12 @@ def build_context(args: argparse.Namespace) -> dict:
 
     attachment_status = file_status(data.get("attachment_zip_path", ""))
     title_parts = split_cnvd_title(data.get("title", ""), data.get("vuln_type", ""))
+    form_type = resolve_form_type(data.get("is_event", "0"))
+    object_type_label = soft_style_label(data.get("soft_style_id", ""))
 
     checks = {
+        "form_type_ready": bool(form_type["form_type_label"]),
+        "object_type_ready": bool(object_type_label),
         "title_input_ready": bool(title_parts["title_input"]),
         "title_final_expected_ready": bool(title_parts["title_final_expected"]),
         "attachment_exists": attachment_status["exists"],
@@ -148,6 +188,7 @@ def build_context(args: argparse.Namespace) -> dict:
         "attachment_is_zip": attachment_status["suffix"] == ".zip",
         "attachment_name_starts_with_cnvd": attachment_status["name_starts_with_cnvd"],
         "description_ready": bool(data.get("description", "")),
+        "detail_url_ready": True,
         "is_open_no": True,
         "no_browser_phase_extraction": True,
     }
@@ -155,20 +196,79 @@ def build_context(args: argparse.Namespace) -> dict:
     context = {
         **data,
         **title_parts,
+        **form_type,
         "schema": "cnvd_form_context_v1",
         "platform": "CNVD",
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "source_target": args.target,
         "resolved_data_dir": resolved_data_dir,
         "is_open": "否",
+        "detail_url": "http://test.com",
+        "detail_unknown_value": "见附件",
         "temp_solution": "无",
         "formal_solution": "见附件",
+        "detail_phase": {
+            "description": data.get("description", ""),
+            "url": "http://test.com",
+            "temp_solution": "无",
+            "formal_solution": "见附件",
+            "other_required_default": "见附件",
+        },
+        "dropdown_phase": {
+            "form_type_label": form_type["form_type_label"],
+            "vuln_type": data.get("vuln_type", ""),
+            "object_type_label": object_type_label,
+        },
+        "page_payloads": {
+            "select_first": {
+                "form_type_label": form_type["form_type_label"],
+                "vuln_type": data.get("vuln_type", ""),
+            },
+            "base_info": {
+                "is_open": "否",
+            },
+            "vendor_info": {
+                "unit_name": data.get("unit_name", ""),
+                "url": data.get("url", ""),
+                "object_type_label": object_type_label,
+                "affected_product": data.get("affected_product", ""),
+                "version": data.get("version", ""),
+            },
+            "detail_info": {
+                "title_input": title_parts["title_input"],
+                "description": data.get("description", ""),
+                "detail_url": "http://test.com",
+                "temp_solution": "无",
+                "formal_solution": "见附件",
+                "other_required_default": "见附件",
+            },
+            "attachments": {
+                "attachment_zip_path": data.get("attachment_zip_path", ""),
+            },
+        },
+        "fill_order": [
+            "1. 先选择 漏洞所属类型(form_type_label)",
+            "2. 再选择 漏洞类型(vuln_type)",
+            "3. 页面联动完成后，一次性填写 base_info/vendor_info/detail_info",
+            "4. 最后上传 attachment_zip_path 并处理验证码",
+        ],
+        "interaction_rules": {
+            "snapshot_budget": "除导航、下拉联动确认、提交结果确认外，不要为单个字段重复 take_snapshot。",
+            "fill_rule": "页面联动完成后，优先一次性 fill_form 完成整组字段，不要填一个字段就重新检查一次。",
+            "browser_phase_source": "浏览器阶段只读取 page_payloads 和 dropdown_phase，不重新读取 Word。",
+        },
+        "ocr": {
+            "preferred_server_url": DEFAULT_OCR_SERVER_URL,
+            "start_command": "python3 scripts/captcha_ocr.py --serve --port 18765",
+            "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL}",
+            "submit_rule": "提交前先刷新验证码，再截图识别；识别结果返回后直接填入并提交，不要再 take_snapshot。",
+        },
         "submission_zip_path": data.get("attachment_zip_path", ""),
         "submission_zip_status": attachment_status,
         "attachment_status": attachment_status,
         "checks": checks,
         "ready": all(checks.values()),
-        "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；禁止重新压缩目录或重新判断标题。",
+        "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；必须先选择 漏洞所属类型 和 漏洞类型，待页面联动完成后使用 page_payloads 一次性填写其余字段；第二阶段禁止重新读取 Word、重新提取描述、重新压缩目录或重新判断标题。",
         "dingtalk": {
             "success_title": "监管上报 CNVD 上报完成",
             "success_text_template": (

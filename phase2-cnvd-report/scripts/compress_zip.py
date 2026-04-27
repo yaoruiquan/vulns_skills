@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""生成 CNNVD 单漏洞整包 zip。"""
+"""生成 CNVD 单漏洞整包 zip。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import zipfile
 from pathlib import Path
 
 
-def default_zip_output(folder_path: str, prefix: str = "CNNVD") -> Path:
+def default_zip_output(folder_path: str, prefix: str = "CNVD") -> Path:
     """生成默认 zip 输出路径，输出到材料目录父级。"""
     folder = Path(folder_path).expanduser().resolve()
     name = folder.name
@@ -45,7 +45,7 @@ def compress_folder(folder_path: str, output_path: str = "", include_root: bool 
     return str(zip_path)
 
 
-def ensure_submission_zip(folder_path: str, output_path: str = "", prefix: str = "CNNVD") -> str:
+def ensure_submission_zip(folder_path: str, output_path: str = "", prefix: str = "CNVD") -> str:
     """若默认位置已有 zip 则直接返回，否则创建。"""
     folder = Path(folder_path).expanduser().resolve()
     if not folder.is_dir():
@@ -59,13 +59,13 @@ def ensure_submission_zip(folder_path: str, output_path: str = "", prefix: str =
 
 def build_parser() -> argparse.ArgumentParser:
     """构造命令行参数解析器。"""
-    parser = argparse.ArgumentParser(description="压缩 CNNVD 材料目录为单漏洞整包 zip")
-    parser.add_argument("folder_path", help="CNNVD 材料目录路径")
+    parser = argparse.ArgumentParser(description="压缩 CNVD 材料目录为单漏洞整包 zip")
+    parser.add_argument("folder_path", help="CNVD 材料目录路径")
     parser.add_argument("--output", default="", help="输出 zip 路径；默认写到材料目录父级")
     parser.add_argument(
         "--without-root",
         action="store_true",
-        help="zip 内不包含最外层目录名；默认保留最外层 CNNVD 目录",
+        help="zip 内不包含最外层目录名；默认保留最外层 CNVD 目录",
     )
     return parser
 

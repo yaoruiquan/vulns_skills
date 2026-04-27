@@ -10,22 +10,24 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 
 下拉框遇到不确定时，优先查 [dropdown-options.md](dropdown-options.md)。
 
+优先直接读取 `dropdown_plan` 和 `page_payloads`。每页一次性填写，不要因为单个字段重复快照和判断。
+
 ### 第 1 页：漏洞基本信息
 
 只处理必填下拉框和必填文本：
 
-- `漏洞类型`：使用 `vuln_type`，优先查 `references/dropdown-options.md`，再按 `references/vuln-type-mapping.md` 的级联路径选择。
-- `漏洞自评级`：使用 `risk_level`，Word 为空时脚本默认 `高危`。
-- `受影响实体分类`：使用 `affected_entity_category`，优先查 `references/dropdown-options.md` 的速查映射。
+- `漏洞类型`：使用 `page_payloads.page1_dropdowns.vuln_type_path`，优先查 `references/dropdown-options.md`，再按 `references/vuln-type-mapping.md` 的级联路径选择。
+- `漏洞自评级`：使用 `page_payloads.page1_dropdowns.risk_level`，Word 为空时脚本默认 `高危`。
+- `受影响实体分类`：使用 `page_payloads.page1_dropdowns.affected_entity_category`，优先查 `references/dropdown-options.md` 的速查映射。
 - 如页面提示必填，再补充 `漏洞名称`、`受影响实体名称`、`受影响实体版本`、`受影响实体描述`；其中 `受影响实体描述` 来自数据准备阶段的 websearch 总结。
 
 ### 第 2 页：漏洞详情
 
 只填写：
 
-- `漏洞描述或简介`：使用 `description`，取 Word 的“漏洞简介”，并去掉 `经恒脑AI代码审计智能体分析：` 前缀。
-- `技术支持`：使用 `technical_support`。
-- `技术支持联系电话`：使用 `contact`。
+- `漏洞描述或简介`：使用 `page_payloads.page2_text.description`，取 Word 的“漏洞简介”，并去掉 `经恒脑AI代码审计智能体分析：` 前缀。
+- `技术支持`：使用 `page_payloads.page2_text.technical_support`。
+- `技术支持联系电话`：使用 `page_payloads.page2_text.contact`。
 
 `漏洞描述或简介` 页面限制最多 255 个字符。只填写 `description`，不要填写 `description_full`。
 
@@ -33,9 +35,9 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 
 只填写和上传：
 
-- `验证过程`：只使用数据准备阶段总结压缩后的 `FormContext.verification`，不要重新运行脚本，不要直接粘贴 Word 原文；图片只作为理解材料，不插入表单。
-- `验证录像`：上传 `verification_video_path`。
-- `POC文件`：上传 `poc_file_path`。
+- `验证过程`：只使用 `page_payloads.page3_text.verification`，不要重新运行脚本，不要直接粘贴 Word 原文；图片只作为理解材料，不插入表单。
+- `验证录像`：上传 `page_payloads.page3_uploads.verification_video_path`。
+- `POC文件`：上传 `page_payloads.page3_uploads.poc_file_path`。
 
 ## 二、表单字段与数据来源
 
@@ -105,5 +107,6 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 
 - 只操作 `漏洞类型`、`漏洞自评级`、`受影响实体分类` 这三个必填下拉框。
 - 优先用 `evaluate_script` 直接点击 Element UI 下拉项，避免每个选项都用 `take_snapshot` 查 uid。
+- 每页字段准备好后尽量一次性 `fill_form`，不要填完一个字段就再确认一次页面状态。
 - 级联下拉选择最终节点时，点击选项前面的圆圈/单选按钮，不要只点击文字。
 - 如果选择某项后动态出现新的非必填字段，不填写；如果动态出现必填字段，能选择“其他”就选“其他”，文本框统一填“见附件”。

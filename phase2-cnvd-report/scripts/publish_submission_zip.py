@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
+from compress_zip import ensure_submission_zip
+
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = SKILL_ROOT / ".env"
@@ -111,6 +113,18 @@ def find_platform_zip(folder_path: str) -> str:
     return str(max(candidates, key=lambda item: item.stat().st_size))
 
 
+def resolve_zip_from_context(context: dict) -> str:
+    """优先使用上下文字段；没有则尝试查找或自动生成 CNVD zip。"""
+    zip_path = (
+        context.get("submission_zip_path")
+        or context.get("attachment_zip_path")
+        or find_platform_zip(context.get("folder_path", ""))
+    )
+    if zip_path:
+        return zip_path
+    return ensure_submission_zip(context.get("folder_path", ""))
+
+
 def resolve_zip_and_context(target: str, vuln_name: str = "") -> tuple[Path, dict]:
     """优先使用 form_context.json；zip 路径仅作为兼容输入。"""
     path = Path(target).expanduser().resolve()
@@ -119,13 +133,9 @@ def resolve_zip_and_context(target: str, vuln_name: str = "") -> tuple[Path, dic
 
     if path.is_file() and path.suffix.lower() == ".json":
         context = read_context(path)
-        zip_path = (
-            context.get("submission_zip_path")
-            or context.get("attachment_zip_path")
-            or find_platform_zip(context.get("folder_path", ""))
-        )
+        zip_path = resolve_zip_from_context(context)
         if not zip_path:
-            raise SystemExit("form_context.json 中未找到 CNVD zip 路径，且材料目录未找到 CNVD-*.zip")
+            raise SystemExit("form_context.json 中未找到 CNVD zip 路径，且无法根据材料目录自动生成 CNVD-*.zip")
         return Path(zip_path).expanduser().resolve(), context
 
     if path.is_file() and path.suffix.lower() == ".zip":

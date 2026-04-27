@@ -4,16 +4,22 @@
 
 浏览器填表阶段只读取 `/tmp/vulns-skills/phase2-cnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。`extract_vuln_data.py` 是底层提取脚本，不直接作为浏览器阶段的数据源；运行时 JSON 不写入 CNVD 提交材料目录。
 
+优先读取 `dropdown_phase` 和 `page_payloads`。页面联动完成后，一次性填写同组字段，不要填一个字段就重新检查一次。
+
 | 表单字段 | 数据来源 | 字段名 |
 |---------|---------|-------|
+| 漏洞所属类型 | form_context.json | form_type_label，先选“通用型漏洞”或“事件型漏洞” |
 | 漏洞厂商 | form_context.json | unit_name |
 | 厂商官网 | form_context.json | url |
 | 影响对象类型 | form_context.json | soft_style_id |
 | 影响产品 | form_context.json | affected_product |
-| 影响产品版本 | form_context.json | version |
+| 影响产品版本 | form_context.json | version，优先取 Word 的 `受影响实体版本号`，再回退 `影响版本` / `版本号` |
 | 漏洞名称 | form_context.json | title_input |
 | 漏洞类型 | form_context.json | vuln_type |
 | 漏洞描述 | form_context.json | description，已清理固定分析前缀 |
+| 漏洞URL | form_context.json | detail_url，固定为 `http://test.com` |
+| 临时解决方案 | form_context.json | temp_solution，固定为 `无` |
+| 正式解决方案 | form_context.json | formal_solution，固定为 `见附件` |
 | 漏洞附件 | form_context.json | attachment_zip_path |
 | 钉钉下载附件 | form_context.json | submission_zip_path，等同 CNVD 原始整包 zip |
 
@@ -66,14 +72,17 @@
 
 | 字段类型 | 填写内容 |
 |---------|---------|
+| 漏洞URL | `http://test.com` |
 | 临时解决方案 | "无" |
 | 正式解决方案 | "见附件" |
 | 其他无法获取的字段 | "见附件" |
 
 ## 5. CNVD 特殊规则
 
+- 填写顺序固定为：先选 `form_type_label`，再选 `vuln_type`，等待页面联动完成后，再一次性填写其余文本字段。
 - “是否公开”必须选择“否”。
 - 漏洞描述直接使用 `description` 字段，不要填写 `经恒脑AI代码审计智能体分析：` 前缀。
-- 附件必须上传 `attachment_zip_path` 指向的 CNVD 原始整包 zip，不要重新压缩 docx 目录。
+- 选择完“漏洞类型”后，漏洞详情页只允许继续填写 `description`、`detail_url`、`temp_solution`、`formal_solution` 和固定默认值；不要再次读取 docx 或临时运行提取脚本。
+- 附件必须上传 `attachment_zip_path` 指向的 CNVD 原始整包 zip；若材料目录里还没有 `CNVD-*.zip`，准备阶段会自动补建。
 - 准备阶段 `ready` 为 `false` 时不能进入浏览器填表；先修复 `checks` 里失败的项。
 - 提交成功后的钉钉附件下载也使用同一个 CNVD 原始整包 zip；不要上传整个批次目录。

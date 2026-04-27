@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from compress_zip import ensure_submission_zip
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_cnnvd_data, resolve_target
 
 
@@ -17,6 +18,7 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnnvd-report/form-contexts",
 )
+DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", "http://127.0.0.1:18765")
 
 
 def clip_text(text: str, max_length: int) -> str:
@@ -153,6 +155,28 @@ def find_submission_zip_path(folder_path: str) -> str:
     return str(max(candidates, key=lambda item: item.stat().st_size))
 
 
+def resolve_vuln_type_path(vuln_type: str) -> list[str]:
+    """将漏洞类型映射成 CNNVD 级联下拉路径。"""
+    text = (vuln_type or "").strip()
+    mapping = [
+        (("命令执行", "命令注入"), ["代码问题", "输入验证错误", "注入", "命令注入"]),
+        (("SQL注入", "sql注入"), ["代码问题", "输入验证错误", "注入", "SQL注入"]),
+        (("XSS", "跨站脚本"), ["代码问题", "输入验证错误", "注入", "跨站脚本"]),
+        (("代码执行", "代码注入"), ["代码问题", "输入验证错误", "注入", "代码注入"]),
+        (("文件包含", "路径遍历", "目录遍历"), ["代码问题", "输入验证错误", "路径遍历"]),
+        (("文件上传",), ["代码问题", "输入验证错误", "后置链接"]),
+        (("CSRF", "跨站请求伪造"), ["代码问题", "输入验证错误", "跨站请求伪造"]),
+        (("越界", "溢出", "缓冲区", "二进制", "UAF", "uaf"), ["代码问题", "输入验证错误", "缓冲区错误"]),
+        (("格式化字符串",), ["代码问题", "输入验证错误", "注入", "格式化字符串错误"]),
+        (("权限绕过", "未授权访问", "访问控制"), ["代码问题", "授权问题", "权限许可和访问控制问题"]),
+        (("信任边界",), ["代码问题", "授权问题", "信任管理问题"]),
+    ]
+    for keywords, path in mapping:
+        if any(keyword in text for keyword in keywords):
+            return path
+    return ["其他"]
+
+
 def build_context(args: argparse.Namespace) -> dict:
     """构建完整 FormContext。"""
     das_id, data_dir, doc_path_override = resolve_target(args.target, "CNNVD", args.data_dir)
@@ -189,10 +213,53 @@ def build_context(args: argparse.Namespace) -> dict:
     context["entity_description_source"] = entity_description_source
     context["verification"] = clip_text(verification, 300)
     context["verification_source_type"] = verification_source_type
+    context["dropdown_plan"] = {
+        "vuln_type_path": resolve_vuln_type_path(context.get("vuln_type", "")),
+        "risk_level": context.get("risk_level", ""),
+        "affected_entity_category": context.get("affected_entity_category", ""),
+    }
+    context["page_payloads"] = {
+        "page1_dropdowns": {
+            "vuln_type_path": resolve_vuln_type_path(context.get("vuln_type", "")),
+            "risk_level": context.get("risk_level", ""),
+            "affected_entity_category": context.get("affected_entity_category", ""),
+        },
+        "page1_text": {
+            "title": context.get("title", ""),
+            "affected_product": context.get("affected_product", ""),
+            "version": context.get("version", ""),
+            "entity_description": clip_text(entity_description, 120),
+        },
+        "page2_text": {
+            "description": clip_text(context.get("description", ""), 255),
+            "technical_support": context.get("technical_support", ""),
+            "contact": context.get("contact", ""),
+        },
+        "page3_text": {
+            "verification": clip_text(verification, 300),
+        },
+        "page3_uploads": {
+            "verification_video_path": context.get("verification_video_path", ""),
+            "poc_file_path": context.get("poc_file_path", ""),
+        },
+    }
+    context["interaction_rules"] = {
+        "snapshot_budget": "每页仅在进入页面、下拉联动确认、提交结果确认时 take_snapshot；不要为单个字段反复截图。",
+        "fill_rule": "每页按 page_payloads 一次性填写，不要在第 2 页和第 3 页重新提取或总结。",
+        "dropdown_rule": "优先按 dropdown_plan 直接选择；级联下拉点击最终叶子项前面的圆圈/单选按钮，不要按 Escape。",
+    }
+    context["ocr"] = {
+        "preferred_server_url": DEFAULT_OCR_SERVER_URL,
+        "start_command": "python3 scripts/captcha_ocr.py --serve --port 18765",
+        "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL}",
+        "submit_rule": "如遇验证码，优先走常驻 OCR 服务；识别后直接填入并提交，不要再 take_snapshot。",
+    }
 
     video_status = file_status(context.get("verification_video_path", ""))
     poc_status = file_status(context.get("poc_file_path", ""))
     submission_zip_path = find_submission_zip_path(context.get("folder_path", ""))
+    if not submission_zip_path:
+        submission_zip_path = ensure_submission_zip(context.get("folder_path", ""))
     submission_zip_status = file_status(submission_zip_path)
 
     checks = {
@@ -219,7 +286,7 @@ def build_context(args: argparse.Namespace) -> dict:
     context["checks"] = checks
     context["ready"] = all(checks.values())
     context["browser_phase_rule"] = (
-        "浏览器阶段只能读取本 form_context.json；第 2 页和第 3 页禁止重新运行提取脚本或重新总结。"
+        "浏览器阶段只能读取本 form_context.json；按 dropdown_plan 和 page_payloads 分页填写；第 2 页和第 3 页禁止重新运行提取脚本或重新总结。"
     )
     context["dingtalk"] = {
         "success_title": "监管上报 CNNVD 上报完成",

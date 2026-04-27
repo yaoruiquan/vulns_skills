@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 
+from compress_zip import ensure_submission_zip
+
 # 加载 .env 配置
 SKILL_DIR = Path(__file__).parent.parent
 ENV_FILE = SKILL_DIR / ".env"
@@ -74,7 +76,7 @@ def find_attachment_zip_path(platform_folder: str, platform: str) -> str:
 
     zip_files = platform_zips or fallback_zips
     if not zip_files:
-        return ""
+        return ensure_submission_zip(platform_folder, prefix=platform_upper)
 
     return str(max(zip_files, key=lambda path: path.stat().st_size))
 
@@ -92,6 +94,15 @@ def clean_cnvd_description(description: str) -> str:
         count=1,
     )
     return cleaned.strip()
+
+
+def first_non_empty(fields: Dict[str, str], *keys: str) -> str:
+    """按优先级返回第一个非空字段。"""
+    for key in keys:
+        value = (fields.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def extract_fields_from_docx(doc_path: str) -> Dict[str, str]:
@@ -193,7 +204,7 @@ def extract_cnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[str
         "soft_style_id": map_soft_style(fields.get("影响对象类型", "")),
         "discoverer_name": fields.get("提交人员", ""),
         "affected_product": fields.get("影响产品", ""),
-        "version": fields.get("影响版本", ""),
+        "version": first_non_empty(fields, "受影响实体版本号", "影响版本", "版本号"),
         "folder_path": folder_path,
         "docx_path": doc_path,
         "attachment_zip_path": attachment_zip_path,

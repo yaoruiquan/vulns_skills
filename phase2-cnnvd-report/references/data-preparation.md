@@ -35,6 +35,8 @@ python3 scripts/prepare_form_context.py \
 
 如需指定其他位置，使用 `--output`。
 
+注意：本 skill 的所有 Python 命令一律使用 `python3`，不要使用 `python`。
+
 ---
 
 ## 二、FormContext 必备字段
@@ -61,8 +63,11 @@ python3 scripts/prepare_form_context.py \
 | `verification` | agent 总结压缩/脚本草稿 | 一段文字，不插入图片 |
 | `verification_video_path` | 本地目录 | 优先取 `exp验证视频` 下的视频，其次取 `poc验证视频`、`验证视频`、`视频`、`video` |
 | `poc_file_path` | 本地目录 | 优先取 `exp` 下的 zip/脚本，其次取 `poc`、`POC`、`PoC` |
-| `submission_zip_path` | 本地目录 | 单个漏洞的 CNNVD 原始整包 zip，用于提交成功后的钉钉附件下载链接 |
+| `submission_zip_path` | 本地目录 | 单个漏洞的 CNNVD 原始整包 zip，用于提交成功后的钉钉附件下载链接；若不存在，准备阶段会自动补建 |
 | `publish_ready` | 脚本判断 | `true` 表示提交成功后可直接运行上传推送脚本 |
+| `dropdown_plan` | 准备阶段推断 | 第 1 页三个必填下拉框的目标值；`vuln_type_path` 为级联路径 |
+| `page_payloads` | 准备阶段组装 | 第 1/2/3 页直接填写的字段分组 |
+| `ocr` | 固定值 + `.env` | 常驻 OCR 服务地址和推荐命令 |
 
 ---
 
@@ -112,6 +117,7 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 ## 五、页面复用规则
 
 - 浏览器阶段只读取 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。
+- 浏览器阶段优先读取 `dropdown_plan` 和 `page_payloads`，每页一次性填写，不要填一个字段就重新截图一次。
 - 第 1 页使用 `vuln_type`、`risk_level`、`affected_entity_category`、`title`、`affected_product`、`version`、`entity_description`。
 - 第 2 页使用 `description`、`technical_support`、`contact`；`description` 已限制在 255 字以内，不要改用 `description_full`。
 - 第 3 页使用 `verification`、`verification_video_path`、`poc_file_path`。
@@ -125,6 +131,7 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 提交前确认：
 
 - 三个必填下拉框已选中，且级联下拉已点击最终叶子选项前面的圆圈/单选按钮。
+- 如遇验证码，优先使用 `ocr.preferred_server_url` 指向的常驻 OCR 服务。
 - `entity_description` 已补齐。
 - `description` 长度不超过 255 字。
 - `verification` 是总结压缩后的一段文字，不是 Word 原文长文本。
@@ -147,8 +154,8 @@ python3 scripts/publish_submission_zip.py \
 
 规则：
 
-- 只上传单个漏洞的 `CNNVD-*.zip` 原始整包。
+- 只上传单个漏洞的 `CNNVD-*.zip` 原始整包；如果材料目录里还没有该 zip，`prepare_form_context.py` / `publish_submission_zip.py` 会自动补建。
 - 不上传整个批次目录。
-- 不重新压缩材料目录。
+- 不需要再手工执行 `zip -r` 或临时创建压缩包。
 - 钉钉消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。
 - 默认远端目录为 `/root/msrc-report-downloads/cnnvd-submissions/YYYY-MM/DAS-ID/`。

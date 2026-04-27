@@ -16,6 +16,8 @@ vim .env
 
 `setup.sh` 会创建 `.env`、生成当前路径的 `.mcp.json`，并设置脚本可执行权限。已有 `.env` 不会被覆盖。
 
+所有 Python 脚本一律使用 `python3` 执行，不要使用 `python`。
+
 ### 2. 必填配置
 
 | 环境变量 | 说明 | 默认/示例 |
@@ -143,13 +145,15 @@ claude mcp get cnnvd-chrome
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - 监管上报类技能统一使用同一个机器人，关键词统一为 `监管上报`。
 - 钉钉通知是收尾动作；提交成功后优先使用 `publish_submission_zip.py <form_context.json> --platform-id <CNNVD-ID> --notify`，消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。
-- `publish_submission_zip.py` 只上传单个漏洞的 CNNVD 原始整包 zip，不上传整个批次目录，也不重新压缩。
+- `publish_submission_zip.py` 只上传单个漏洞的 CNNVD 原始整包 zip，不上传整个批次目录；若本地尚未生成 `CNNVD-*.zip`，脚本会自动补建。
 - CNNVD 表单只填写带 danger/红色必填标记的字段；非必填字段不要为了补充信息而反复操作下拉框。
-- Step 1 必须生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
+- Step 1 必须生成 `/tmp/vulns-skills/phase2-cnnvd-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件中的 `dropdown_plan`、`page_payloads`、`ocr` 和附件路径，不再运行 `extract_vuln_data.py`。
 - `prepare_form_context.py` 负责整理完整 `FormContext`，包括 websearch 得到的受影响实体描述和总结压缩后的漏洞验证过程。
+- 执行任何 `.py` 脚本时都使用 `python3 scripts/...`，不要写成 `python scripts/...`。
 - 第 3 页漏洞验证阶段禁止再跑 Word 提取脚本；只填 `FormContext.verification`。如果为空，回到 Step 1 补齐。
-- 第 1 页只操作三个必填下拉框：漏洞类型、漏洞自评级、受影响实体分类；遇到选项判断先查 `references/dropdown-options.md`。
+- 第 1 页只操作三个必填下拉框：漏洞类型、漏洞自评级、受影响实体分类；优先按 `dropdown_plan` 直接选择，遇到选项判断先查 `references/dropdown-options.md`。
 - 级联下拉必须点击最终叶子选项前面的圆圈/单选按钮完成选择，不要只点击文字，也不要按 Escape 关闭。
+- 每页优先按 `page_payloads` 一次性填完，不要因为单个字段反复 `take_snapshot` 或重新判断。
 - 漏洞描述或简介使用 Word 的“漏洞简介”，不要带 `经恒脑AI代码审计智能体分析：` 前缀。
 - `漏洞描述或简介` 最多 255 字，只填 `description`，不要改用 `description_full`。
 - 验证过程需要根据 `verification_source` 自行总结压缩成一段文字，不插入图片，不直接粘贴 `verification_source` 或 Word 超长原文。
