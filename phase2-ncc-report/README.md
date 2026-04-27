@@ -1,265 +1,102 @@
-# 产品安全研究部 AI-Skills
-
-> 赋能安全研究，探索AI驱动的下一代安全能力
-
-## 🧠 关于本仓库
-
-本仓库由 **产品安全研究部** 维护，聚焦于 **人工智能与安全研究深度融合** 的实践沉淀。我们致力于探索利用大语言模型（LLM）、机器学习（ML）等 AI 技术，提升安全检测、漏洞分析、威胁情报、自动化攻防等方向的研究效率与创新边界。
-
-无论你是安全研究员、开发工程师，还是对 AI + Security 交叉领域感兴趣的探索者，这里都将为你提供可落地的代码、实验案例、研究思路和最佳实践。
-
-## 🎯 主要方向
-
-- **智能漏洞挖掘**：基于 LLM 的代码审计、Fuzzing 用例生成、污点分析辅助
-- **自动化逆向分析**：二进制理解、反编译代码注释、控制流/数据流智能分析
-- **威胁情报与态势感知**：非结构化情报信息抽取、IOC 自动化提炼、攻击链推理
-- **AI 安全评估**：模型鲁棒性测试、对抗样本生成、提示词注入检测
-- **安全运营自动化**：告警降噪、事件自动分类、响应剧本生成
-
 # phase2-ncc-report
 
 通过 Chrome DevTools MCP 控制真实浏览器完成 NCC 平台漏洞上报。平台入口：`https://www.nccsec.cn/company-center/manage-center`。
 
-## 这个 skill 做什么
+## 功能
 
-- 从本地漏洞 `docx` 材料提取上报字段。
-- 自动识别同目录下的 `zip / 截图 / 视频` 附件。
-- 打开 NCC 平台企业中心，完成登录、表单填写、验证码识别和提交。
-- 上传平台要求的附件材料。
-- 提交成功后记录平台返回的 `NCC-xxxx` 编号。
-- 可选推送钉钉机器人通知。
+- 从本地漏洞 docx 材料提取上报字段
+- 自动识别同目录下的 zip/截图/视频附件
+- 打开 NCC 平台企业中心，完成登录、表单填写、验证码识别和提交
+- 上传平台要求的附件材料
+- 提交成功后记录平台返回的 NCC-xxxx 编号
+- 可选推送钉钉通知（需配置 webhook）
 
-## 新用户上手
+## 使用流程
 
-### 1. 安装依赖
+### 第一步：安装 Claude Code（或其他 agent 工具）
 
-```bash
-npm install -g chrome-devtools-mcp@latest
-pip3 install websocket-client python-docx openpyxl ddddocr
+参见官网文档安装配置。
+
+### 第二步：安装本 skill
+
+一句指令，通过 GitHub 地址安装到 agent 工具：
+
+```
+claude skills install <GitHub 地址>
 ```
 
-### 2. 初始化配置
+### 第三步：手动配置 .env
 
-```bash
+```
 cd /Users/yao/.claude/skills/phase2-ncc-report
-./scripts/setup.sh
+cp .env.example .env
+vim .env
 ```
 
-初始化脚本会：
+填写 NCC 平台账号密码、漏洞数据父目录、钉钉配置等（agent 会引导你完成）。
 
-- 从 `.env.example` 创建 `.env`，已有 `.env` 不覆盖。
-- 生成指向当前目录 wrapper 的 `.mcp.json`。
-- 设置脚本可执行权限。
+### 第四步：启动 agent
 
-### 3. 编辑 `.env`
-
-新用户只需要修改父目录、账号、密码，以及必要时修改端口/profile。具体某一次要处理的 `DAS` 目录或 `docx` 路径，不放进 `.env`，而是在运行命令时传入。
-
-| 环境变量 | 说明 | 默认/示例 |
-|----------|------|-----------|
-| `NCC_PLATFORM_URL` | NCC 平台管理中心地址 | `https://www.nccsec.cn/company-center/manage-center` |
-| `VULN_DATA_DIR` | 漏洞数据根目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
-| `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-ncc-report/form-contexts` |
-| `PYTHON_PROJECT_PATH` | Python 项目路径，可选 | `/path/to/your/python/project` |
-| `NCC_USERNAME` | NCC 平台登录账号，可选 | 空 |
-| `NCC_PASSWORD` | NCC 平台登录密码，可选 | 空 |
-| `CHROME_DEBUG_PORT` | Chrome 调试端口 | `9334` |
-| `CHROME_PROFILE_NAME` | Chrome profile 名称 | `ncc-report` |
-| `DINGTALK_WEBHOOK` | 钉钉机器人 webhook，可选 | 空 |
-| `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
-| `DINGTALK_KEYWORD` | 钉钉机器人关键词，可选 | 空 |
-| `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
-
-`CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME` 仍兼容旧配置，但新用户应使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
-
-### 4. 推荐启动方式
-
-如果一次只跑一个浏览器型 skill，推荐每个 Claude session 都先进入对应 skill 目录再启动 Claude Code：
-
-```bash
+```
 cd /Users/yao/.claude/skills/phase2-ncc-report
 claude
 ```
 
-这样 Claude 会自动读取本目录的 `.mcp.json`，使用 `ncc-chrome` 连接本 skill 的 `9334` 端口和 `ncc-report` Chrome profile。多个并发 session 分别 `cd` 到各自 skill 目录启动即可。
+从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口（9334）和 profile 不冲突。
 
-### 5. 启动专用浏览器
+### 第五步：调用 skill
 
-```bash
-./scripts/start-chrome-debug.sh
+给 agent 一句指令：
+
+```
+安装依赖并初始化环境
 ```
 
-可选模式：
+agent 会自动执行以下操作：
 
-- `isolated`：独立空 profile，默认模式。
-- `seed-default`：复制日常 Chrome profile 快照，适合复用登录态。
-- `live-default`：直接使用日常 Chrome 用户数据目录，使用前先关闭普通 Chrome。
+```
+# MCP 工具
+npm install -g chrome-devtools-mcp@latest
 
-### 6. 验证
+# Python 依赖
+pip install websocket-client python-docx openpyxl ddddocr pandas
 
-```bash
+# 初始化配置
+./scripts/setup.sh
+
+# 启动 Chrome 并验证
+./scripts/start-chrome-debug.sh
 curl -s http://127.0.0.1:9334/json/version
 claude mcp get ncc-chrome
 ```
 
-如果 Claude Code 不是从本 skill 目录启动，在实际项目目录注册：
+### 第六步：执行上报
 
-```bash
-claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
 ```
-
-## 浏览器与 MCP
-
-本 skill 默认：
-
-- 调试端口：`9334`
-- Chrome profile：`ncc-report`
-- MCP wrapper：`scripts/chrome-devtools-mcp-wrapper.sh`
-- MCP server 名：`ncc-chrome`
-
-`scripts/start-chrome-debug.sh` 负责启动真实 Chrome，`scripts/chrome-devtools-mcp-wrapper.sh` 只负责让 MCP attach 到 `http://127.0.0.1:9334`。
-
-## 常用命令
-
-```bash
-cd /Users/yao/.claude/skills/phase2-ncc-report
-./scripts/setup.sh
-./scripts/start-chrome-debug.sh
-curl -s http://127.0.0.1:9334/json/version
-python3 scripts/prepare_form_context.py --input-path "/path/to/DAS-T106003-漏洞目录"
-python3 scripts/prepare_form_context.py --docx-path "/path/to/report.docx"
-python3 scripts/captcha_ocr.py /tmp/captcha.png
-python3 scripts/captcha_ocr.py --serve --port 18765
-python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
-python3 scripts/dingtalk_notify.py --title "NCC 平台上报完成" --status success --text "DAS-ID：DAS-T106003\nNCC编号：NCC-2026-04947"
+/phase2-ncc-report /path/to/漏洞数据目录/DAS-Txxxxx
 ```
-
-浏览器填表前先运行 `scripts/prepare_form_context.py`，默认生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json`。`extract_vuln_data.py` 只作为底层提取工具；进入浏览器阶段后只读取这个 JSON，不再临时提取 Word，也不要把运行时 JSON 放进正式提交材料目录。
-
-`prepare_form_context.py` 会优先选择 `CNVD-` 材料目录，并自动固化：
-
-- `docx_path`
-- `upload_zip_path`
-- `screenshot_paths`
-- `video_paths`
-
-## 钉钉机器人通知
-
-在 `.env` 中填写 `DINGTALK_WEBHOOK` 后，可手动推送上报结果：
-
-```bash
-python3 scripts/dingtalk_notify.py \
-  --title "NCC 平台上报完成" \
-  --status success \
-  --text "DAS-ID：DAS-T106003\nNCC编号：NCC-2026-04947" \
-  --output "/path/to/data/DAS-T106003"
-```
-
-`--text` 支持命令行字面量 `\n`，脚本会转换为真实换行；`--link` 支持 `名称=URL` 格式；如果机器人启用了关键词，可在 `.env` 中配置 `DINGTALK_KEYWORD`。真实 webhook 只放在 `.env`，不要写入 README 或提交到 Git。
-
-## 工作流程
-
-1. 准备本地漏洞材料；`.env` 只维护父目录。
-2. 运行 `prepare_form_context.py`，把具体 `DAS` 目录或 `docx` 路径传进去，生成 `/tmp` 下的 `form_context.json`。
-3. 启动 skill 专用浏览器并确认 MCP 可用。
-4. 打开 `NCC_PLATFORM_URL`，如果未登录则走“企业”登录页。
-5. 登录成功后，在右上角“提交漏洞”下拉菜单进入填表页。
-6. 用 MCP 快照确认字段 `uid` 和下拉值。
-7. 填写漏洞信息，第一版优先上传 `form_context.json` 中的 `upload_zip_path`。
-8. 点击提交后，人工完成拖拽拼图验证。
-9. 成功页记录 `NCC-xxxx`。
-10. 如已配置 `DINGTALK_WEBHOOK`，可推送钉钉通知。
-
-详细流程见 `references/workflow.md`。
 
 ## 目录结构
 
-```text
+```
 phase2-ncc-report/
-├── SKILL.md
-├── README.md
-├── .env.example
-├── .mcp.json
-├── scripts/
+├── SKILL.md              # agent 执行指令（流程、规则、约束）
+├── README.md             # 本文件（用户使用说明）
+├── .env.example          # 配置模板，首次使用 cp 为 .env
+├── .mcp.json             # MCP 配置（setup.sh 自动生成）
+├── scripts/              # 实现脚本
 │   ├── setup.sh
-│   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── start-chrome-debug.sh
+│   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── extract_vuln_data.py
 │   ├── prepare_form_context.py
 │   ├── captcha_ocr.py
 │   └── dingtalk_notify.py
-└── references/
-    ├── captcha-ocr.md
+└── references/           # agent 执行参考
+    ├── workflow.md
     ├── field-mapping.md
-    ├── mcp-connection.md
-    ├── mcp-tools.md
     ├── selectors.md
-    ├── setup-guide.md
-    └── workflow.md
+    ├── captcha-ocr.md
+    ├── mcp-connection.md
+    └── mcp-tools.md
 ```
-
-## 排错
-
-### 端口打不开
-
-```bash
-./scripts/start-chrome-debug.sh
-curl -s http://127.0.0.1:9334/json/version
-```
-
-### Claude 连到了错误的浏览器
-
-- 确认当前 Claude Code 启动目录。
-- 确认 `claude mcp get ncc-chrome` 的 wrapper 路径。
-- 确认 `.mcp.json` 指向当前 skill 的 `scripts/chrome-devtools-mcp-wrapper.sh`。
-
-### 平台登录态或验证码问题
-
-优先使用：
-
-```bash
-./scripts/start-chrome-debug.sh seed-default
-```
-
-如仍不行，先彻底退出普通 Chrome，再尝试：
-
-```bash
-./scripts/start-chrome-debug.sh live-default
-```
-
-当前已知情况：
-
-- 登录页没有普通验证码。
-- 点击提交后会出现拖拽拼图验证。
-- 第一版把这一步留给人工处理，不强行脚本化。
-
-## 复用/迁移
-
-复制 skill 给其他用户时：
-
-1. 复制整个目录。
-2. 运行 `./scripts/setup.sh`。
-3. 只修改 `.env` 中的路径、账号、密码、端口/profile。
-4. 如需从其他项目目录使用，运行 `claude mcp add ...`。
-
-不要手工改 wrapper 脚本；路径变化由 `setup.sh` 重新生成 `.mcp.json`。
-
-## 多浏览器 MCP 并发
-
-各 skill 的端口/profile/MCP server 名必须独立运行。后续新增浏览器型 skill 时，也必须分配唯一端口、唯一 Chrome profile、唯一 MCP server 名。本 skill 默认使用唯一名称：
-
-```bash
-claude mcp add ncc-chrome -- /Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh
-```
-
-不要把本 skill 注册成通用的 `chrome-devtools`，否则同一 Claude 项目里加载 CNVD、CNNVD、NCC 或预警 skill 时会互相覆盖。
-
-## 参考文档
-
-- [setup-guide.md](references/setup-guide.md)
-- [workflow.md](references/workflow.md)
-- [field-mapping.md](references/field-mapping.md)
-- [selectors.md](references/selectors.md)
-- [captcha-ocr.md](references/captcha-ocr.md)
-- [mcp-connection.md](references/mcp-connection.md)
-- [mcp-tools.md](references/mcp-tools.md)
