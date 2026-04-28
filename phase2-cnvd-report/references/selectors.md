@@ -52,3 +52,5 @@
 1. **表单类型切换**：必须先触发 `#isEvent1` 的 `change` 事件，否则表单字段不会更新
 2. **元素 ID 后缀**：通用型漏洞字段有 `1` 后缀（如 `title1`），事件型无后缀
 3. **隐藏字段**：某些字段可能在表单类型切换前不可见
+4. **Select2 组件**：`#isEvent1` / `#titlel1` / `#softStyleId1` 这些选择器指向底层 `<select>`，页面实际显示的是 Select2 组件；a11y 树里的选项可能不可点击
+5. **下拉框设值**：优先运行 `python3 scripts/browser_snippets.py select2 ...` 生成的 `evaluate_script`，它会同步原生 select、`change` 事件和 jQuery Select2 UI

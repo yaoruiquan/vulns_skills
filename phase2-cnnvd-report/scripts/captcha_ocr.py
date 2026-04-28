@@ -113,7 +113,7 @@ def parse_args():
     parser.add_argument("--server-url", default=os.environ.get("CAPTCHA_OCR_SERVER_URL", ""), help="本地 OCR 服务地址")
     parser.add_argument("--serve", action="store_true", help="启动常驻 OCR 服务")
     parser.add_argument("--host", default="127.0.0.1", help="OCR 服务监听地址")
-    parser.add_argument("--port", type=int, default=18765, help="OCR 服务监听端口")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("CAPTCHA_OCR_PORT", "18766")), help="OCR 服务监听端口")
     return parser.parse_args()
 
 

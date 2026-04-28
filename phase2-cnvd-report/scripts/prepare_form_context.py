@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
+from browser_snippets import shell_command_for_select2
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_cnvd_data, extract_fields_from_docx, find_docx_path
 
 
@@ -223,6 +224,7 @@ def build_context(args: argparse.Namespace) -> dict:
             "select_first": {
                 "form_type_label": form_type["form_type_label"],
                 "vuln_type": data.get("vuln_type", ""),
+                "object_type_label": object_type_label,
             },
             "base_info": {
                 "is_open": "否",
@@ -230,7 +232,6 @@ def build_context(args: argparse.Namespace) -> dict:
             "vendor_info": {
                 "unit_name": data.get("unit_name", ""),
                 "url": data.get("url", ""),
-                "object_type_label": object_type_label,
                 "affected_product": data.get("affected_product", ""),
                 "version": data.get("version", ""),
             },
@@ -247,28 +248,42 @@ def build_context(args: argparse.Namespace) -> dict:
             },
         },
         "fill_order": [
-            "1. 先选择 漏洞所属类型(form_type_label)",
-            "2. 再选择 漏洞类型(vuln_type)",
-            "3. 页面联动完成后，一次性填写 base_info/vendor_info/detail_info",
+            "1. 先执行 browser_helpers.select2_command，同步 漏洞所属类型(form_type_label)、漏洞类型(vuln_type)、影响对象类型(object_type_label)",
+            "2. Select2 返回 ok=true 后，一次性填写 base_info/vendor_info/detail_info",
+            "3. 不要在 fill_form 中重复填写 Select2 下拉框",
             "4. 最后上传 attachment_zip_path 并处理验证码",
         ],
         "interaction_rules": {
             "snapshot_budget": "除导航、下拉联动确认、提交结果确认外，不要为单个字段重复 take_snapshot。",
             "fill_rule": "页面联动完成后，优先一次性 fill_form 完成整组字段，不要填一个字段就重新检查一次。",
             "browser_phase_source": "浏览器阶段只读取 page_payloads 和 dropdown_phase，不重新读取 Word。",
+            "login_guard_rule": "进入 /flaw/create 后必须先执行 browser_helpers.login_guard_command 生成的脚本；如检测到 Cloudflare 或登录页，先恢复登录态，不要继续填表。",
+            "select2_rule": "CNVD 下拉框是 Select2 自定义组件，优先执行 browser_helpers.select2_command 生成的脚本，不要依赖 a11y 树点击选项。",
+        },
+        "browser_helpers": {
+            "is_open_command": "python3 scripts/browser_snippets.py is-open",
+            "login_guard_command": "python3 scripts/browser_snippets.py login-guard",
+            "select2_command": shell_command_for_select2(
+                form_type["form_type_label"],
+                data.get("vuln_type", ""),
+                object_type_label,
+            ),
+            "open_captcha_tab_command": "python3 scripts/browser_snippets.py captcha-tab",
+            "captcha_preview_command": "python3 scripts/browser_snippets.py captcha-tab",
+            "submit_captcha_command_template": "python3 scripts/browser_snippets.py submit-captcha '<OCR识别结果>'",
         },
         "ocr": {
             "preferred_server_url": DEFAULT_OCR_SERVER_URL,
             "start_command": "python3 scripts/captcha_ocr.py --serve --port 18765",
-            "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL}",
-            "submit_rule": "提交前先刷新验证码，再截图识别；识别结果返回后直接填入并提交，不要再 take_snapshot。",
+            "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL} --preprocess cnvd",
+            "submit_rule": "提交前不要点击刷新；直接用 browser_helpers.open_captcha_tab_command 打开当前 #codeSpan1 img 的 /common/myCodeNew 验证码图片新标签页，在新标签页截图识别；识别结果返回后回到原表单页，用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交，不要再 take_snapshot。",
         },
         "submission_zip_path": data.get("attachment_zip_path", ""),
         "submission_zip_status": attachment_status,
         "attachment_status": attachment_status,
         "checks": checks,
         "ready": all(checks.values()),
-        "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；必须先选择 漏洞所属类型 和 漏洞类型，待页面联动完成后使用 page_payloads 一次性填写其余字段；第二阶段禁止重新读取 Word、重新提取描述、重新压缩目录或重新判断标题。",
+        "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；必须先执行 browser_helpers.select2_command 同步 Select2 下拉框，待页面联动完成后使用 page_payloads 一次性填写其余非 Select2 字段；第二阶段禁止重新读取 Word、重新提取描述、重新压缩目录或重新判断标题。",
         "dingtalk": {
             "success_title": "监管上报 CNVD 上报完成",
             "success_text_template": (

@@ -43,6 +43,7 @@ claude
 ```
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口（9333）和 profile 不冲突。
+CNNVD OCR 默认使用 `18766`，与 CNVD 的 `18765` 隔离，两个 skill 同时运行时不会抢同一个 OCR 端口。
 
 ### 第五步：调用 skill
 
@@ -76,6 +77,14 @@ claude mcp get cnnvd-chrome
 /phase2-cnnvd-report /path/to/漏洞数据目录/DAS-Txxxxx
 ```
 
+批量上报：
+
+```
+/phase2-cnnvd-report /path/to/批次目录
+```
+
+批次目录内部包含多个 `DAS-*` 目录时，agent 会按目录名顺序上报 `CNNVD-*` 材料。第一条做环境检查；每条完成后记录编号并直接进入下一条；全部完成后统一发送一条钉钉消息。
+
 ## 目录结构
 
 ```
@@ -90,12 +99,14 @@ phase2-cnnvd-report/
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── extract_vuln_data.py
 │   ├── prepare_form_context.py
+│   ├── batch_report.py
 │   ├── publish_submission_zip.py
 │   ├── captcha_ocr.py
 │   ├── update_summary.py
 │   └── dingtalk_notify.py
 └── references/           # agent 执行参考
     ├── data-preparation.md
+    ├── batch-report.md
     ├── data-fields.md
     ├── dropdown-options.md
     ├── vuln-type-mapping.md

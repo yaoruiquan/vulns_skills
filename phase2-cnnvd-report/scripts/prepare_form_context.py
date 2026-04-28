@@ -18,7 +18,8 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnnvd-report/form-contexts",
 )
-DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", "http://127.0.0.1:18765")
+DEFAULT_OCR_PORT = int(os.environ.get("CAPTCHA_OCR_PORT", "18766"))
+DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", f"http://127.0.0.1:{DEFAULT_OCR_PORT}")
 
 
 def clip_text(text: str, max_length: int) -> str:
@@ -250,7 +251,7 @@ def build_context(args: argparse.Namespace) -> dict:
     }
     context["ocr"] = {
         "preferred_server_url": DEFAULT_OCR_SERVER_URL,
-        "start_command": "python3 scripts/captcha_ocr.py --serve --port 18765",
+        "start_command": f"python3 scripts/captcha_ocr.py --serve --port {DEFAULT_OCR_PORT}",
         "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL}",
         "submit_rule": "如遇验证码，优先走常驻 OCR 服务；识别后直接填入并提交，不要再 take_snapshot。",
     }

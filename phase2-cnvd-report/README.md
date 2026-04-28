@@ -43,6 +43,7 @@ claude
 ```
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口和 profile 不冲突。
+CNVD OCR 默认使用 `18765`，CNNVD OCR 默认使用 `18766`，两个 skill 同时运行时不要共用同一个 OCR 端口。
 
 ### 第五步：调用 skill
 
@@ -76,6 +77,14 @@ claude mcp get cnvd-chrome
 /phase2-cnvd-report /path/to/漏洞数据目录/DAS-Txxxxx
 ```
 
+批量上报：
+
+```
+/phase2-cnvd-report /path/to/批次目录
+```
+
+批次目录内部包含多个 `DAS-*` 目录时，agent 会按目录名顺序上报 `CNVD-*` 材料。第一条做环境检查；每条完成后记录编号并直接进入下一条；全部完成后统一发送一条钉钉消息。
+
 ## 目录结构
 
 ```
@@ -89,12 +98,23 @@ phase2-cnvd-report/
 │   ├── start-chrome-debug.sh
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── prepare_form_context.py
+│   ├── browser_snippets.py
+│   ├── batch_report.py
 │   ├── publish_submission_zip.py
 │   ├── captcha_ocr.py
 │   └── dingtalk_notify.py
 └── references/           # agent 执行参考
     ├── workflow.md
+    ├── batch-report.md
     ├── field-mapping.md
     ├── selectors.md
     └── captcha-ocr.md
 ```
+
+## 上报注意事项
+
+- 进入 `/flaw/create` 后先做登录态检查；出现 Cloudflare 或回到登录页时，先恢复会话，不要继续填表。
+- CNVD 下拉框是 Select2 组件，选项无法点击时让 agent 使用 `scripts/browser_snippets.py select2`，不要反复点 a11y 树。
+- 验证码识别固定使用 `browser_snippets.py captcha-tab`：把当前 `/common/myCodeNew?t=...` 验证码图片打开到新标签页，不覆盖表单页；识别后回原表单页提交。
+- 登录验证码失败后页面可能清空密码框；重试前必须重新确认账号、密码、验证码都已填写。
+- 批量模式使用 `scripts/batch_report.py` 管理状态；单条完成后只记录编号，不单独推送钉钉，最后统一通知。

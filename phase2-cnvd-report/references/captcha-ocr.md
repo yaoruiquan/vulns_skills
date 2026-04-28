@@ -35,10 +35,22 @@ python3 scripts/captcha_ocr.py --serve --port 18765
 # 之后每次识别走本地服务，避免重复加载 ddddocr
 python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
 
+# 固定流程：先用 captcha-tab 打开验证码图片新标签页，再截图识别
+python3 scripts/browser_snippets.py captcha-tab
+python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765 --preprocess cnvd
+
 # 也可以通过环境变量配置
 export CAPTCHA_OCR_SERVER_URL=http://127.0.0.1:18765
 python3 scripts/captcha_ocr.py /tmp/captcha.png
 ```
+
+参数说明：
+
+| 参数 | 作用 |
+|------|------|
+| `--preprocess cnvd` | 做对比度增强并至少放大 3 倍；直接验证码图通常不需要裁剪，但保留该参数更稳 |
+| `--crop-box x1,y1,x2,y2` | 旧截图排障参数；正常 CNVD 提交流程不要使用裁剪分支 |
+| `--scale 3` | OCR 前放大图片，适合验证码原图过小的情况 |
 
 ## 当前识别逻辑
 
@@ -47,7 +59,7 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 - 普通模式：每次执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png` 都会启动 Python 进程并加载一次 `ddddocr` 模型。
 - 加速模式：执行 `python3 scripts/captcha_ocr.py --serve --port 18765` 后，OCR 模型常驻内存；后续识别只把图片发给本地服务，速度明显更快。
 
-验证码刷新太快时，优先使用加速模式。
+验证码有效期较短时，优先使用加速模式。
 
 ## 自动化流程
 
@@ -56,13 +68,15 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 │                      验证码自动识别流程                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  提交前最后一步先点击验证码图片刷新                             │
+│  提交前最后一步打开验证码图片新标签页                           │
 │         ↓                                                    │
-│  MCP: take_screenshot，只截验证码图片区域                      │
+│  python3 scripts/browser_snippets.py captcha-tab              │
+│         ↓                                                    │
+│  MCP: 切到新标签页，只截验证码图片本体                          │
 │    filePath: "/tmp/captcha.png"                              │
 │         ↓                                                    │
 │  python3 scripts/captcha_ocr.py /tmp/captcha.png              │
-│    --server-url http://127.0.0.1:18765                       │
+│    --server-url http://127.0.0.1:18765 --preprocess cnvd      │
 │         ↓                                                    │
 │  识别结果: "读书"                                             │
 │         ↓                                                    │
@@ -70,7 +84,7 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 │         ↓                                                    │
 │  检查结果 → 成功/失败                                         │
 │         ├── 成功 → 继续                                       │
-│         └── 失败 → 新标签页打开验证码图，再截图识别             │
+│         └── 失败 → 重新执行 captcha-tab 打开新图再识别          │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -85,8 +99,18 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 
 ## 注意事项
 
-1. **先刷新后识别**：提交前先点击一次验证码图片刷新，再截图识别，避免拿到旧图
-2. **验证码刷新**：验证码必须放到提交前最后一步处理；不要在识别后再 `take_snapshot`、检查字段或等待人工判断，否则验证码可能刷新
+1. **直接开图识别**：提交前不要点击刷新；直接执行 `python3 scripts/browser_snippets.py captcha-tab`，把当前 `#codeSpan1 img.src` 指向的 `/common/myCodeNew?t=...` 打开到新标签页
+2. **不覆盖表单页**：验证码图片必须用新标签页打开，原表单页保持不动；识别后回到原表单页提交
 3. **加速优先**：验证码刷新太快时，先启动 `python3 scripts/captcha_ocr.py --serve --port 18765`，后续识别统一走 `--server-url`
 4. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
-5. **失败重试**：如果页面提示验证码错误，先刷新当前验证码；必要时把验证码图片在新标签页打开，对新标签页中的图片重新截图识别，不复用旧结果
+5. **地址校验**：`captcha-tab` 会校验验证码 URL 的 path 必须是 `/common/myCodeNew`，避免误打开页面上的其他图片
+6. **失败重试**：如果页面提示验证码错误，重新执行 captcha-tab 打开新的验证码图片标签页并识别，不复用旧标签页和旧结果
+
+## 最快稳定路径
+
+最快路径不是反复截图页面或刷新验证码，而是固定为：
+
+1. 原表单页只执行一次 `captcha-tab`，读取当前 `#codeSpan1 img.src` 并新开标签页。
+2. 新标签页只截验证码图片本体，避免识别到“看不清？点击更换”等干扰文字。
+3. OCR 常驻服务提前启动，识别命令走 `--server-url`，避免每次加载模型。
+4. 识别完成立即回原表单页，用一次 `submit-captcha` 脚本完成填入和提交。
