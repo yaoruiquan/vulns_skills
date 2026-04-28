@@ -25,6 +25,8 @@
 claude skills install <GitHub 地址>
 ```
 
+如果新用户没有 SSH key，优先使用 HTTPS 地址安装；需要 GitHub/GitLab SSH 或内部服务器上传权限时，先按 [上级 README 的 SSH key 说明](../README.md#没有-ssh-key-怎么办) 配置。
+
 ### 第三步：手动配置 .env
 
 ```
@@ -34,6 +36,8 @@ vim .env
 ```
 
 填写 NCC 平台账号密码、漏洞数据父目录、钉钉配置等（agent 会引导你完成）。
+
+如需上传 NCC 附件或推送下载链接，推荐配置 SSH key 免密；临时情况下可只在本机 `.env` 中填写 `REPORT_UPLOAD_PASSWORD`，不要提交到 Git。
 
 ### 第四步：启动 agent
 

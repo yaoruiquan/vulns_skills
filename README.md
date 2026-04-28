@@ -30,6 +30,102 @@
 
 > 每个 skill 目录下均有 README.md 说明使用流程，SKILL.md 为 agent 执行指令。
 
+## 新用户准备
+
+### 1. 安装 agent 工具
+
+先安装 Claude Code 或团队指定的其他 agent 工具。安装完成后确认命令可用：
+
+```bash
+claude --version
+```
+
+### 2. 安装 skills
+
+如果使用 HTTPS 地址，通常不需要 SSH key：
+
+```bash
+claude skills install https://github.com/yaoruiquan/vulns_skills.git
+```
+
+如果使用公司内网 GitLab 或 SSH 地址，按下面“没有 SSH key 怎么办”先配置访问权限。
+
+### 3. 初始化单个 skill
+
+进入具体 skill 目录后，可以直接让 agent 处理初始化：
+
+```text
+安装依赖并初始化环境
+```
+
+agent 会按该 skill 的 README 和 SKILL.md 执行依赖安装、`.env` 初始化、浏览器 MCP 启动和连通性检查。
+
+## 没有 SSH key 怎么办
+
+新用户常见有两类 SSH 需求：代码仓库访问、报告上传服务器访问。两者不是一回事。
+
+### 1. 访问 GitHub/GitLab 仓库
+
+如果只是安装或拉取公开仓库，优先使用 HTTPS 地址，不需要 SSH key。
+
+如果仓库要求 SSH 访问，先生成本机 SSH key：
+
+```bash
+ssh-keygen -t ed25519 -C "your.name@dbappsecurity.com.cn"
+```
+
+一路回车使用默认路径即可，通常会生成：
+
+```text
+~/.ssh/id_ed25519
+~/.ssh/id_ed25519.pub
+```
+
+复制公钥：
+
+```bash
+pbcopy < ~/.ssh/id_ed25519.pub
+```
+
+然后把公钥添加到 GitHub 或 GitLab：
+
+- GitHub：Settings -> SSH and GPG keys -> New SSH key
+- GitLab：Preferences -> SSH Keys -> Add new key
+
+验证连接：
+
+```bash
+ssh -T git@github.com
+ssh -T git@gitlab.info.dbappsecurity.com.cn
+```
+
+看到欢迎或认证成功提示即可。即使提示 “shell access is not provided”，也通常表示 Git 认证已成功。
+
+### 2. 上传报告到内部服务器
+
+预警、MSRC、CNVD、CNNVD、NCC、CNVD weekly 等 skill 的发布或更新脚本可能会通过 SSH/SCP 上传 zip、PDF、HTML 预览或 XML 文件到内部服务器。
+
+推荐做法是让服务器管理员把你的公钥加入上传账号的 `~/.ssh/authorized_keys`。先生成并复制公钥：
+
+```bash
+ssh-keygen -t ed25519 -C "your.name@dbappsecurity.com.cn"
+pbcopy < ~/.ssh/id_ed25519.pub
+```
+
+如果服务器支持 `ssh-copy-id`，也可以直接安装公钥：
+
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub <user>@<upload-host>
+```
+
+验证上传服务器登录：
+
+```bash
+ssh <user>@<upload-host>
+```
+
+如果暂时没有 SSH key，也可以在本机 `.env` 中配置 `REPORT_UPLOAD_PASSWORD` 作为临时方案。密码只能保存在本机 `.env`，不要写入 `.env.example`、README、聊天记录或提交到 Git。
+
 ## 维护者
 
 姚瑞泉

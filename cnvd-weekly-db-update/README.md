@@ -24,6 +24,8 @@
 claude skills install <GitHub 地址>
 ```
 
+如果新用户没有 SSH key，优先使用 HTTPS 地址安装；本 skill 还需要登录内部服务器执行上传和 Docker 操作，必须先按 [上级 README 的 SSH key 说明](../README.md#没有-ssh-key-怎么办) 配置服务器免密或申请管理员加入公钥。
+
 ### 第三步：手动配置 .env
 
 ```
@@ -33,6 +35,8 @@ vim .env
 ```
 
 填写钉钉 webhook 配置（agent 会引导你完成）。
+
+本 skill 默认通过 SSH key 免密访问内部服务器；不建议在文档或 Git 中保存服务器密码。
 
 ### 第四步：启动 agent
 
