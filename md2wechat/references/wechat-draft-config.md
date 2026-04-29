@@ -95,6 +95,7 @@ python3 scripts/render_alert_cover.py article.md --font /path/to/SourceHanSansCN
 
 ```bash
 md2wechat config validate
+python3 scripts/render_wechat_article.py article.md --output article.html --json
 md2wechat inspect article.md --mode ai --draft --cover cover.jpg --strict
 md2wechat test-draft article.html cover.jpg
 ```
@@ -103,12 +104,13 @@ md2wechat test-draft article.html cover.jpg
 
 ```bash
 ./scripts/md2wechat-env.sh config validate
+python3 scripts/render_wechat_article.py article.md --output /tmp/article.html --json
 python3 scripts/render_alert_cover.py article.md --output /tmp/article-cover.png --poc true --exp true --wild false --research true
 ./scripts/md2wechat-env.sh inspect article.md --mode ai --draft --cover /tmp/article-cover.png --strict
-./scripts/md2wechat-env.sh test-draft article.html /tmp/article-cover.png
+./scripts/md2wechat-env.sh test-draft /tmp/article.html /tmp/article-cover.png
 ```
 
-如果 HTML 是由 agent 按 `antian-security-theme.md` 直接生成的，优先使用 `test-draft <html_file> <cover_image>`。当前机器的 `md2wechat 2.1.0` 支持该命令。
+HTML 必须由 `scripts/render_wechat_article.py` 根据占位符模板确定性生成，不要让 agent 临场手写 HTML。生成后优先使用 `test-draft <html_file> <cover_image>`。当前机器的 `md2wechat 2.1.0` 支持该命令。
 
 `convert --draft` 默认走 API 模式，缺少 `MD2WECHAT_API_KEY` 时会被 `inspect --strict` 判定为不可用；除非已经配置 API key，否则不要把它作为预警流程的首选上传方式。
 

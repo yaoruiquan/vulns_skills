@@ -2,11 +2,13 @@
 
 本文件用于指导 agent 将漏洞预警 Markdown 转成微信公众号兼容的完整内联 HTML。该主题面向“安恒信息 CERT / 产品安全研究部”类安全通告，不依赖浏览器操作。
 
+确定性渲染入口是 `scripts/render_wechat_article.py`，占位符模板是 `assets/wechat-alert-article-template.placeholders.html`。真实样式基准来自 `assets/wechat-alert-article-template.html`，仅用于维护模板时参考，不能原样上传其中的旧漏洞内容、图片地址、编辑器属性或微信后台痕迹。
+
 ## 使用场景
 
 - 用户提供漏洞预警 `.md`，要求生成公众号 HTML。
 - 用户要求将漏洞预警同步到公众号草稿箱。
-- `md2wechat` 识别到 `antian-security` 主题，但只返回通用 AI prompt，需要 agent 按本规范直接生成 HTML。
+- `md2wechat` 识别到 `antian-security` 主题但只返回通用 AI prompt 时，不再让 agent 手写 HTML，改为运行 `scripts/render_wechat_article.py`。
 
 ## 总体原则
 
@@ -14,8 +16,9 @@
 2. 所有样式必须写在标签 `style` 属性中，禁止 `<style>`、外链 CSS、JS、事件属性。
 3. HTML 必须可直接作为公众号图文正文内容使用。
 4. 不新增漏洞事实，不改写 CVE、版本、风险等级、修复方案、参考链接等关键内容。
-5. 标题、摘要、作者、封面属于草稿元数据，不强行写入正文；正文首屏只保留主题头图/导语/风险概览。
+5. 标题、摘要、作者、封面属于草稿元数据；正文首屏必须贴近真实模板：顶部横幅图占位、漏洞概述表格、正文说明。
 6. 表格必须适配手机端，优先使用 `width:100%; table-layout:fixed; word-break:break-word;`。
+7. 不要使用渐变头部卡片、圆角卡片堆叠等自由发挥样式；这些与真实模板差异过大。
 
 ## 色彩
 
@@ -56,27 +59,27 @@
 
 ## 页面结构
 
-正文按以下顺序组织：
+正文按以下顺序组织，尽量对齐 `assets/wechat-alert-article-template.html`：
 
-1. 头部卡片：通告类型、标题、风险等级、发布日期。
-2. 导语摘要：1-2 段，说明漏洞影响和处理建议。
-3. 风险速览：CVE、漏洞等级、影响产品、是否公开 PoC、是否在野利用。
-4. 漏洞详情：漏洞描述、影响范围、CVSS、利用条件。
-5. 修复建议：官方修复方案、临时缓解方案。
-6. 参考链接。
-7. 免责声明/技术支持。
+1. 顶部横幅图占位：保留 `<!-- IMG:banner -->` 或使用已上传的公众号图片 URL；不要使用渐变头部卡片替代。
+2. 漏洞概述表格：四列表格，蓝色整行表头“漏洞概述”，字段包含漏洞名称、安恒CERT评级、CVSS3.1评分、CVE/CNVD/CNNVD/安恒CERT编号、POC/EXP/在野利用/研究情况、危害描述。
+3. 风险提醒段落：说明产品使用范围、危害性和建议客户自查防护。
+4. 漏洞描述：使用真实模板的二级小标题样式和正文段落。
+5. 影响范围：列出影响版本、安全版本、影响产品。
+6. 修复建议：官方修复方案、临时缓解方案。
+7. 参考资料：蓝色装饰标题后直接列 URL。
+8. 产品能力覆盖：如 Markdown 提供相关内容则生成；否则省略，不要虚构。
+9. 技术支持：固定保留 `如有漏洞相关需求支持请联系400-6059-110获取相关能力支撑。`
 
 如果原 Markdown 缺少某一部分，不要虚构；可以省略该模块。
 
-## 头部卡片
+## 顶部横幅图
 
-用于文章开头，突出安全通告属性。
+真实模板正文开头是横幅图，不是文字头部卡片。脚本生成 HTML 时使用占位符，后续由上传流程替换为公众号图片：
 
 ```html
-<section style="margin:0 0 22px 0;padding:22px 18px;border-radius:14px;background:linear-gradient(135deg,#f4f7ff 0%,#ffffff 62%,#fff8df 100%);border:1px solid #d9e4ff;box-shadow:0 8px 24px rgba(69,119,218,0.10);">
-  <p style="margin:0 0 10px 0;color:#4577da;font-size:13px;line-height:1.6;font-weight:700;letter-spacing:1px;">安全预警 / SECURITY ADVISORY</p>
-  <h1 style="margin:0;color:#1f2d3d;font-size:22px;line-height:1.45;font-weight:800;">文章标题</h1>
-  <p style="margin:14px 0 0 0;color:#666666;font-size:14px;line-height:1.8;">风险等级：<span style="display:inline-block;padding:1px 8px;border-radius:999px;background:#d93026;color:#ffffff;font-size:13px;font-weight:700;">高危</span></p>
+<section style="margin:10px 0px;letter-spacing:0.544px;text-align:center;line-height:0;">
+  <!-- IMG:banner -->
 </section>
 ```
 
@@ -89,16 +92,19 @@
 
 ## 一级区块标题
 
-用于“一、安全通告”“二、漏洞信息”等主要章节。
+用于“漏洞描述”“影响范围”“修复建议”“参考资料”“产品能力覆盖”“技术支持”等主要章节。样式要贴近真实模板：标题居中，左右为蓝色短竖条，标题下有蓝色细线。
 
 ```html
-<section style="margin:28px 0 14px 0;text-align:center;">
-  <section style="display:inline-block;padding:0 16px 8px 16px;border-bottom:2px solid #4577da;">
-    <span style="display:inline-block;width:4px;height:14px;margin-right:4px;background:#4577da;vertical-align:middle;border-radius:2px;"></span>
-    <span style="display:inline-block;width:4px;height:18px;margin-right:10px;background:#f8c025;vertical-align:middle;border-radius:2px;"></span>
-    <span style="color:#1f2d3d;font-size:17px;font-weight:800;vertical-align:middle;">一、安全通告</span>
-    <span style="display:inline-block;width:4px;height:18px;margin-left:10px;background:#f8c025;vertical-align:middle;border-radius:2px;"></span>
-    <span style="display:inline-block;width:4px;height:14px;margin-left:4px;background:#4577da;vertical-align:middle;border-radius:2px;"></span>
+<section style="margin:20px 0px 15px;font-size:16px;letter-spacing:0.578px;display:flex;flex-flow:row;text-align:center;justify-content:center;">
+  <section style="margin-right:4px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
+    <section style="display:inline-block;width:3px;height:10px;vertical-align:top;overflow:hidden;background-color:#4577da;"></section>
+  </section>
+  <section style="display:inline-block;vertical-align:bottom;width:auto;flex:0 0 auto;align-self:flex-end;min-width:10%;height:auto;padding:0px 12px;box-sizing:border-box;">
+    <section style="text-align:justify;font-size:17px;"><p><strong>漏洞描述</strong></p></section>
+    <section style="margin-top:2px;"><section style="background-color:#4577da;height:1px;"></section></section>
+  </section>
+  <section style="margin-left:4px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
+    <section style="display:inline-block;width:3px;height:16px;vertical-align:top;overflow:hidden;background-color:#4577da;"></section>
   </section>
 </section>
 ```
@@ -133,20 +139,29 @@
 </section>
 ```
 
-## 风险速览表
+## 漏洞概述表
 
-用于 CVE、漏洞类型、风险等级、影响产品、公开状态。
+正文开头必须优先生成该表，而不是卡片式风险速览。表格结构为 4 列，第一行蓝底白字“漏洞概述”。
 
 ```html
-<table style="width:100%;margin:14px 0 18px 0;border-collapse:collapse;table-layout:fixed;border:1px solid #4577da;font-size:14px;line-height:1.7;">
+<table style="min-width:100px;width:100%;border-collapse:collapse;table-layout:fixed;">
   <tbody>
     <tr>
-      <td style="width:32%;padding:8px 8px;background:#4577da;color:#ffffff;font-weight:700;border:1px solid #4577da;">CVE 编号</td>
-      <td style="padding:8px 8px;color:#3e3e3e;border:1px solid #4577da;word-break:break-all;">CVE-YYYY-NNNN</td>
+      <td colspan="4" style="word-break:break-all;border:1px solid #4577da;background-color:#4577da;padding:5px;color:#ffffff;font-size:14px;text-align:center;"><strong>漏洞概述</strong></td>
     </tr>
     <tr>
-      <td style="width:32%;padding:8px 8px;background:#f4f7ff;color:#1f2d3d;font-weight:700;border:1px solid #4577da;">风险等级</td>
-      <td style="padding:8px 8px;color:#d93026;font-weight:700;border:1px solid #4577da;">高危</td>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;"><strong>漏洞名称</strong></td>
+      <td colspan="3" style="width:75%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;">漏洞名称</td>
+    </tr>
+    <tr>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;"><strong>安恒CERT评级</strong></td>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;">评级</td>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;"><strong>CVSS3.1评分</strong></td>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;">评分</td>
+    </tr>
+    <tr>
+      <td style="width:25%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;"><strong>危害描述</strong></td>
+      <td colspan="3" style="width:75%;word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;">危害描述</td>
     </tr>
   </tbody>
 </table>
@@ -209,15 +224,16 @@ Markdown 表格转换时使用：
 
 ## 转换规则
 
-1. Markdown 一级标题可作为草稿标题，不一定进入正文；如果进入正文，使用头部卡片。
-2. Markdown 二级标题转换为“一级区块标题”样式。
-3. Markdown 三级标题转换为“二级小标题”样式。
-4. 普通段落转换为带完整内联样式的 `<p>`。
-5. 表格必须完整转换，不能丢列。
-6. 引用块转换为重要提示卡片。
-7. 链接保留原 URL。
-8. 图片使用 `<!-- IMG:index -->` 占位，不擅自生成远程图片 URL。
-9. 生成 HTML 后必须检查是否存在 `<style>`、`<script>`、`class=`、`onclick=`；存在则重写。
+1. Markdown 一级标题作为草稿标题；正文不要生成渐变头部卡片。
+2. 先根据 Markdown 中的漏洞信息表生成“漏洞概述”四列表格。
+3. Markdown 二级标题转换为真实模板的蓝色装饰标题样式。
+4. Markdown 三级标题转换为“二级小标题”样式。
+5. 普通段落转换为带完整内联样式的 `<p>`。
+6. 表格必须完整转换，不能丢列。
+7. 引用块转换为重要提示卡片。
+8. 链接保留原 URL。
+9. 图片使用 `<!-- IMG:index -->` 占位，不擅自生成远程图片 URL。
+10. 生成 HTML 后必须检查是否存在 `<style>`、`<script>`、`class=`、`contenteditable=`、`ProseMirror`、`onclick=`；存在则重写。
 
 ## 草稿元数据建议
 
@@ -230,6 +246,7 @@ Markdown 表格转换时使用：
 
 当用户要求“生成公众号 HTML”时：
 
+- 运行 `python3 scripts/render_wechat_article.py article.md --output article.html --json`。
 - 输出一个 `.html` 文件路径。
 - 文件内容只包含公众号正文片段，不包含浏览器保存下来的公众号后台整页 HTML。
 

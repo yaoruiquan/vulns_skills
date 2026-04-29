@@ -21,6 +21,7 @@
 | Skill | 用途 |
 |-------|------|
 | [vulnerability-alert-processor](vulnerability-alert-processor/README.md) | 漏洞预警材料整理，生成 Markdown/Word/PDF 报告 |
+| [md2wechat](md2wechat/README.md) | 漏洞预警 Markdown 转公众号 HTML，生成封面并上传草稿箱 |
 | [msrc-vulnerability-report](msrc-vulnerability-report/README.md) | 微软安全更新漏洞预警报告生成 |
 | [phase1-material-processor](phase1-material-processor/SKILL.md) | 监管上报前材料整理（重命名 + docx 模板） |
 | [phase2-ncc-report](phase2-ncc-report/README.md) | NCC 平台漏洞上报（浏览器自动化） |
