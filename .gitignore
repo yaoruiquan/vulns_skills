@@ -8,8 +8,9 @@
 !.gitignore
 !README.md
 
-# 白名单：只包含这 7 个 skills
+# 白名单：只包含已发布维护的 skills
 !cnvd-weekly-db-update/
+!md2wechat/
 !msrc-vulnerability-report/
 !phase1-material-processor/
 !phase2-cnn-report/
@@ -22,6 +23,7 @@
 
 # 排除 skills 内部的子目录中的 .git（如果有）
 cnvd-weekly-db-update/**/.git
+md2wechat/**/.git
 msrc-vulnerability-report/**/.git
 phase1-material-processor/**/.git
 phase2-cnnvd-report/**/.git
