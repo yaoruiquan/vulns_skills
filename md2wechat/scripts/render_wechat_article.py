@@ -595,7 +595,6 @@ def validate_html(output: str) -> None:
 def render(data: AlertData, template: Path) -> str:
     html_template = template.read_text(encoding="utf-8")
     values = {
-        "banner_image": "<!-- IMG:banner -->",
         "overview_table": render_overview(data),
         "intro_html": "\n".join(paragraph(item) for item in data.intro if item != data.reproduction_note),
         "reproduction_html": render_reproduction(data.reproduction_note),

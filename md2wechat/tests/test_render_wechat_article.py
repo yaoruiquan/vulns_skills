@@ -99,6 +99,20 @@ class RenderWechatArticleTests(unittest.TestCase):
         for marker in forbidden:
             self.assertNotIn(marker, output)
 
+    def test_output_does_not_render_source_logo_or_body_title(self) -> None:
+        titled = "# 测试组件存在远程代码执行漏洞\n\n" + SAMPLE
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "sample.md"
+            source.write_text(titled, encoding="utf-8")
+            data = parse_alert(titled, source)
+            output = render(data, DEFAULT_TEMPLATE)
+
+        self.assertNotIn("IMG:banner", output)
+        self.assertNotIn("<img", output.lower())
+        self.assertNotIn("<h1", output.lower())
+        self.assertNotIn("logo.JPG", output)
+        self.assertIn("max-width:578px", output)
+
     def test_bare_numbered_headings_after_html_tables_are_sections(self) -> None:
         markdown = SAMPLE.replace("# 二、 修复方案", "三、修复方案").replace("# 三、 参考资料", "四、参考资料")
         with tempfile.TemporaryDirectory() as tmp:
