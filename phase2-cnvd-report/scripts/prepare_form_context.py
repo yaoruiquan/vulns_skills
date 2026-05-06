@@ -20,7 +20,6 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnvd-report/form-contexts",
 )
-DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", "http://127.0.0.1:18765")
 
 
 def extract_das_id_from_name(name: str) -> str:
@@ -273,10 +272,8 @@ def build_context(args: argparse.Namespace) -> dict:
             "submit_captcha_command_template": "python3 scripts/browser_snippets.py submit-captcha '<OCR识别结果>'",
         },
         "ocr": {
-            "preferred_server_url": DEFAULT_OCR_SERVER_URL,
-            "start_command": "python3 scripts/captcha_ocr.py --serve --port 18765",
-            "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL} --preprocess cnvd",
-            "submit_rule": "提交前不要点击刷新；直接用 browser_helpers.open_captcha_tab_command 打开当前 #codeSpan1 img 的 /common/myCodeNew 验证码图片新标签页，在新标签页截图识别；识别结果返回后回到原表单页，用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交，不要再 take_snapshot。",
+            "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd",
+            "submit_rule": "提交前不要点击刷新；固定执行 browser_helpers.open_captcha_tab_command 打开当前验证码图片新标签页，只用 MCP 对验证码 img 元素截图到 /tmp/captcha.png，再执行 recognize_command 单次本地识别；识别结果返回后用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交。禁止整页/视口截图，禁止默认改用后台 OCR 进程。",
         },
         "submission_zip_path": data.get("attachment_zip_path", ""),
         "submission_zip_status": attachment_status,

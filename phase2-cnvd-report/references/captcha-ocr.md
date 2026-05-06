@@ -2,7 +2,7 @@
 
 ## 概述
 
-使用 ddddocr 库自动识别 CNVD 验证码，实现全自动化流程。优先启动常驻服务，只在本地保持一份模型实例，避免每次提交时重复加载。
+使用 ddddocr 库自动识别 CNVD 验证码，实现全自动化流程。默认不启动后台 OCR 进程，避免端口占用和旧进程代码不一致。
 
 ## 验证码类型
 
@@ -29,19 +29,9 @@ python3 scripts/captcha_ocr.py <图片路径>
 python3 scripts/captcha_ocr.py /tmp/captcha.png
 # 输出：读书
 
-# 加速模式：先启动常驻 OCR 服务，模型只加载一次
-python3 scripts/captcha_ocr.py --serve --port 18765
-
-# 之后每次识别走本地服务，避免重复加载 ddddocr
-python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765
-
-# 固定流程：先用 captcha-tab 打开验证码图片新标签页，再截图识别
+# 默认流程：打开验证码图片新标签页，只截验证码图片本体，再由脚本单次识别
 python3 scripts/browser_snippets.py captcha-tab
-python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url http://127.0.0.1:18765 --preprocess cnvd
-
-# 也可以通过环境变量配置
-export CAPTCHA_OCR_SERVER_URL=http://127.0.0.1:18765
-python3 scripts/captcha_ocr.py /tmp/captcha.png
+python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 ```
 
 参数说明：
@@ -56,10 +46,8 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 
 当前脚本使用 `ddddocr`：
 
-- 普通模式：每次执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png` 都会启动 Python 进程并加载一次 `ddddocr` 模型。
-- 加速模式：执行 `python3 scripts/captcha_ocr.py --serve --port 18765` 后，OCR 模型常驻内存；后续识别只把图片发给本地服务，速度明显更快。
-
-验证码有效期较短时，优先使用加速模式。
+- 默认模式：每次执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd` 都会启动 Python 进程并加载一次 `ddddocr` 模型。
+验证码有效期较短时，优先减少浏览器切换和截图范围，不启动后台 OCR 进程。
 
 ## 自动化流程
 
@@ -72,11 +60,10 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 │         ↓                                                    │
 │  python3 scripts/browser_snippets.py captcha-tab              │
 │         ↓                                                    │
-│  MCP: 切到新标签页，只截验证码图片本体                          │
-│    filePath: "/tmp/captcha.png"                              │
+│  MCP: 只截验证码 img 元素，不截整页/视口                       │
 │         ↓                                                    │
 │  python3 scripts/captcha_ocr.py /tmp/captcha.png              │
-│    --server-url http://127.0.0.1:18765 --preprocess cnvd      │
+│    --preprocess cnvd                                          │
 │         ↓                                                    │
 │  识别结果: "读书"                                             │
 │         ↓                                                    │
@@ -84,7 +71,7 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 │         ↓                                                    │
 │  检查结果 → 成功/失败                                         │
 │         ├── 成功 → 继续                                       │
-│         └── 失败 → 重新执行 captcha-tab 打开新图再识别          │
+│         └── 失败 → 重新 captcha-tab 打开新图再识别              │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -99,18 +86,18 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png
 
 ## 注意事项
 
-1. **直接开图识别**：提交前不要点击刷新；直接执行 `python3 scripts/browser_snippets.py captcha-tab`，把当前 `#codeSpan1 img.src` 指向的 `/common/myCodeNew?t=...` 打开到新标签页
-2. **不覆盖表单页**：验证码图片必须用新标签页打开，原表单页保持不动；识别后回到原表单页提交
-3. **加速优先**：验证码刷新太快时，先启动 `python3 scripts/captcha_ocr.py --serve --port 18765`，后续识别统一走 `--server-url`
-4. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
-5. **地址校验**：`captcha-tab` 会校验验证码 URL 的 path 必须是 `/common/myCodeNew`，避免误打开页面上的其他图片
-6. **失败重试**：如果页面提示验证码错误，重新执行 captcha-tab 打开新的验证码图片标签页并识别，不复用旧标签页和旧结果
-
+1. **直接开图识别**：提交前不要点击刷新；执行 `python3 scripts/browser_snippets.py captcha-tab`，把当前 `#codeSpan1 img.src` 指向的 `/common/myCodeNew?t=...` 打开到新标签页。
+2. **只截图片元素**：新标签页只截验证码 `<img>` 元素本体到 `/tmp/captcha.png`，不要截整个视口。
+3. **禁止整页截图**：验证码原图通常只有约 `80x35` 像素，整页截图会把图片缩在大画布里，ddddocr 容易返回空字符串。
+4. **单次脚本识别**：默认执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd`，不启动或复用后台 OCR 进程。
+5. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
+6. **地址校验**：`captcha-tab` 会校验验证码 URL 的 path 必须是 `/common/myCodeNew`，避免误打开页面上的其他图片
+7. **失败重试**：如果页面提示验证码错误，重新执行 `captcha-tab` 打开新的验证码图片标签页并识别，不复用旧标签页和旧结果
 ## 最快稳定路径
 
 最快路径不是反复截图页面或刷新验证码，而是固定为：
 
-1. 原表单页只执行一次 `captcha-tab`，读取当前 `#codeSpan1 img.src` 并新开标签页。
-2. 新标签页只截验证码图片本体，避免识别到“看不清？点击更换”等干扰文字。
-3. OCR 常驻服务提前启动，识别命令走 `--server-url`，避免每次加载模型。
-4. 识别完成立即回原表单页，用一次 `submit-captcha` 脚本完成填入和提交。
+1. 原表单页执行 `captcha-tab`，读取当前 `#codeSpan1 img.src` 并新开验证码图片标签页。
+2. MCP 只截验证码图片元素到 `/tmp/captcha.png`，不要截整个视口。
+3. OCR 使用单次脚本识别，不依赖端口和后台进程。
+4. 识别完成立即用一次 `submit-captcha` 脚本完成填入和提交。

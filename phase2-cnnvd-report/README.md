@@ -47,7 +47,7 @@ claude
 ```
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口（9333）和 profile 不冲突。
-CNNVD OCR 默认使用 `18766`，与 CNVD 的 `18765` 隔离，两个 skill 同时运行时不会抢同一个 OCR 端口。
+验证码识别默认使用 MCP 截图验证码图片元素到 `/tmp/captcha.png`，再执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png` 单次识别。
 
 ### 第五步：调用 skill
 

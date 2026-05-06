@@ -110,8 +110,8 @@ def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
 def captcha_tab_script() -> str:
     """生成把当前验证码图片 URL 直接打开到新标签页的脚本。"""
     return """() => {
-  const image = document.querySelector('#codeSpan1');
-  if (!image) return { ok: false, reason: '未找到 #codeSpan1' };
+  const image = document.querySelector('#codeSpan1 img') || document.querySelector('#codeSpan1');
+  if (!image) return { ok: false, reason: '未找到 #codeSpan1 img 或 #codeSpan1' };
   if (image.tagName !== 'IMG') return { ok: false, reason: '#codeSpan1 不是 IMG 元素', tag: image.tagName };
   const rawSrc = image.currentSrc || image.src || image.getAttribute('src');
   if (!rawSrc) return { ok: false, reason: '验证码图片没有 src' };

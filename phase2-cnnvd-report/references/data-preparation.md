@@ -67,7 +67,7 @@ python3 scripts/prepare_form_context.py \
 | `publish_ready` | 脚本判断 | `true` 表示提交成功后可直接运行上传推送脚本 |
 | `dropdown_plan` | 准备阶段推断 | 第 1 页三个必填下拉框的目标值；`vuln_type_path` 为级联路径 |
 | `page_payloads` | 准备阶段组装 | 第 1/2/3 页直接填写的字段分组 |
-| `ocr` | 固定值 + `.env` | 常驻 OCR 服务地址和推荐命令 |
+| `ocr` | 脚本固定值 | 验证码图片本地单次识别命令 |
 
 ---
 
@@ -131,7 +131,7 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 提交前确认：
 
 - 三个必填下拉框已选中，且级联下拉已点击最终叶子选项前面的圆圈/单选按钮。
-- 如遇验证码，优先使用 `ocr.preferred_server_url` 指向的常驻 OCR 服务。
+- 如遇验证码，只截验证码图片元素到 `/tmp/captcha.png`，再执行 `ocr.recognize_command` 单次本地识别。
 - `entity_description` 已补齐。
 - `description` 长度不超过 255 字。
 - `verification` 是总结压缩后的一段文字，不是 Word 原文长文本。

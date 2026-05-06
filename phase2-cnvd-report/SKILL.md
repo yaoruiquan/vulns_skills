@@ -82,7 +82,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 
 1. 浏览器阶段只读取 `form_context.json`，不要重新读取 Word、重新压缩、重新判断标题。
 2. 表单里的登录态检查、Select2 下拉框、验证码新标签页开图和验证码提交，必须使用 `form_context.json.browser_helpers` 或 `scripts/browser_snippets.py` 输出的脚本。
-3. OCR 端口固定隔离：CNVD `18765`，CNNVD `18766`。不要 kill 另一个 skill 的 OCR 进程。
+3. 验证码只走 MCP 截图图片元素到 `/tmp/captcha.png` 后单次脚本识别，不启动后台 OCR 进程。
 4. 单个上报成功后记录 `CNVD-ID`；批量模式每条只 `record`，全部完成后只执行一次 `batch_report.py notify`。
 5. 如果脚本输出、`form_context.json` 和 Markdown 文档冲突，以脚本输出和 `form_context.json` 为准。
 
@@ -92,4 +92,4 @@ python3 scripts/batch_report.py start-next "<state_path>"
 - `scripts/browser_snippets.py`：生成页面内 `evaluate_script`，处理 Select2、登录态、验证码开图和提交。
 - `scripts/batch_report.py`：批量状态推进、记录编号、最终统一通知。
 - `scripts/publish_submission_zip.py`：上传单个 CNVD 原始 zip。
-- `scripts/captcha_ocr.py`：验证码 OCR，CNVD 默认 `18765`。
+- `scripts/captcha_ocr.py`：验证码 OCR，读取截图文件并单次识别。

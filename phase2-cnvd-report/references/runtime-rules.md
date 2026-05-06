@@ -34,12 +34,13 @@
 
 ## 验证码
 
-- CNVD OCR 默认端口 `18765`；CNNVD 默认 `18766`。
+- CNVD 验证码默认不启动后台 OCR 进程，避免端口占用和旧进程代码不一致。
 - 提交验证码必须是提交前最后一步。
 - 提交前不要点击刷新验证码。
-- 固定执行 `browser_helpers.open_captcha_tab_command`，把当前 `#codeSpan1 img.src` 的 `/common/myCodeNew?t=...` 直接打开到新标签页；不要覆盖原表单页。
+- 默认执行 `browser_helpers.open_captcha_tab_command`，把当前 `/common/myCodeNew?t=...` 打开到新标签页；不要覆盖原表单页。
 - 识别命令默认加 `--preprocess cnvd`。
-- 切到新标签页后只截验证码图片本体，再调用 OCR。
+- 切到验证码图片标签页后，只截验证码图片元素本体到 `/tmp/captcha.png`，再通过 `ocr.recognize_command` 单次本地识别。
+- 禁止截整个视口或整页；CNVD 验证码原图很小，整页截图会导致 ddddocr 识别为空。
 - OCR 结果返回后，用 `browser_helpers.submit_captcha_command_template` 生成脚本，立即填入并提交。
 - 验证码失败时重新执行 `captcha-tab` 打开新图，不复用旧标签页和旧结果。
 

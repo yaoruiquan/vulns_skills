@@ -18,8 +18,6 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnnvd-report/form-contexts",
 )
-DEFAULT_OCR_PORT = int(os.environ.get("CAPTCHA_OCR_PORT", "18766"))
-DEFAULT_OCR_SERVER_URL = os.environ.get("CAPTCHA_OCR_SERVER_URL", f"http://127.0.0.1:{DEFAULT_OCR_PORT}")
 
 
 def clip_text(text: str, max_length: int) -> str:
@@ -250,10 +248,8 @@ def build_context(args: argparse.Namespace) -> dict:
         "dropdown_rule": "优先按 dropdown_plan 直接选择；级联下拉点击最终叶子项前面的圆圈/单选按钮，不要按 Escape。",
     }
     context["ocr"] = {
-        "preferred_server_url": DEFAULT_OCR_SERVER_URL,
-        "start_command": f"python3 scripts/captcha_ocr.py --serve --port {DEFAULT_OCR_PORT}",
-        "recognize_command": f"python3 scripts/captcha_ocr.py /tmp/captcha.png --server-url {DEFAULT_OCR_SERVER_URL}",
-        "submit_rule": "如遇验证码，优先走常驻 OCR 服务；识别后直接填入并提交，不要再 take_snapshot。",
+        "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png",
+        "submit_rule": "如遇验证码，只截验证码图片元素到 /tmp/captcha.png，再执行 recognize_command 单次本地识别；识别后直接填入并提交，不要再 take_snapshot。",
     }
 
     video_status = file_status(context.get("verification_video_path", ""))

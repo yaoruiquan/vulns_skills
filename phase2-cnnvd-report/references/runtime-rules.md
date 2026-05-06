@@ -32,9 +32,9 @@
 
 ## 验证码
 
-- CNNVD OCR 默认端口 `18766`；CNVD 默认 `18765`。
+- CNNVD 验证码默认不启动后台 OCR 进程，避免端口占用和旧进程代码不一致。
 - 提交验证码必须是提交前最后一步。
-- 如遇验证码，优先使用 `form_context.json.ocr.start_command` 启动常驻服务。
+- 如遇验证码，只截验证码图片元素到 `/tmp/captcha.png`，再执行 `form_context.json.ocr.recognize_command` 单次本地识别。
 - 识别后立即填入并提交，不要再执行 `take_snapshot`、字段复核或长时间等待。
 - 验证码失败时重新截图当前验证码并重试，不复用旧识别结果。
 

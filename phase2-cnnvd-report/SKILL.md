@@ -61,12 +61,6 @@ python3 scripts/batch_report.py init "<批次目录>"
 python3 scripts/batch_report.py start-next "<state_path>"
 ```
 
-CNNVD OCR 服务端口固定为 `18766`：
-
-```bash
-python3 scripts/captcha_ocr.py --serve --port 18766
-```
-
 ## 最短执行骨架
 
 单个上报必须按以下顺序执行；详细字段和页面选择以引用文件、脚本输出和 `form_context.json` 为准：
@@ -95,7 +89,7 @@ python3 scripts/captcha_ocr.py --serve --port 18766
 
 1. 浏览器阶段只读取 `form_context.json`，不要重新读取 Word、重新运行提取脚本、重新压缩、重新总结验证过程。
 2. 页面填写优先使用 `dropdown_plan` 和 `page_payloads`，不要因为单个字段反复 `take_snapshot`。
-3. CNNVD OCR 端口固定 `18766`；CNVD 使用 `18765`。不要 kill 另一个 skill 的 OCR 进程。
+3. 验证码只走 MCP 截图图片元素到 `/tmp/captcha.png` 后单次脚本识别，不启动后台 OCR 进程。
 4. 批量模式每条只 `record`，全部完成后只执行一次 `batch_report.py notify`。
 5. 如果脚本输出、`form_context.json` 和 Markdown 文档冲突，以脚本输出和 `form_context.json` 为准。
 
@@ -103,7 +97,7 @@ python3 scripts/captcha_ocr.py --serve --port 18766
 
 - `scripts/prepare_form_context.py`：生成浏览器阶段唯一数据源。
 - `scripts/batch_report.py`：批量状态推进、记录编号、最终统一通知。
-- `scripts/captcha_ocr.py`：验证码 OCR，CNNVD 默认 `18766`。
+- `scripts/captcha_ocr.py`：验证码 OCR，读取截图文件并单次识别。
 - `scripts/publish_submission_zip.py`：上传单个 CNNVD 原始 zip。
 - `scripts/update_summary.py`：更新漏洞汇总表。
 - `scripts/start-chrome-debug.sh`：启动本 skill 专用 Chrome。
