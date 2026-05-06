@@ -76,7 +76,8 @@ def normalize_space(text: str) -> str:
 def strip_markdown(text: str) -> str:
     text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
-    text = re.sub(r"[*_`#>]+", "", text)
+    text = re.sub(r"(?m)^\s{0,3}>\s?", "", text)
+    text = re.sub(r"[*_`#]+", "", text)
     return normalize_space(text)
 
 
@@ -122,18 +123,40 @@ def split_sections(markdown: str) -> dict[str, str]:
     sections: dict[str, list[str]] = {"__preface__": []}
     current = "__preface__"
     for line in markdown.splitlines():
-        match = re.match(r"^\s{0,3}(#{1,6})\s*(.+?)\s*$", line)
-        if match:
-            current = normalize_heading(match.group(2))
+        heading = parse_section_heading(line)
+        if heading:
+            if is_fix_subheading(heading) and current in {"修复方案", "修复建议"}:
+                sections.setdefault(current, []).append(line)
+                continue
+            current = heading
             sections.setdefault(current, [])
             continue
         sections.setdefault(current, []).append(line)
     return {key: "\n".join(value).strip() for key, value in sections.items()}
 
 
+def parse_section_heading(line: str) -> str:
+    markdown_match = re.match(r"^\s{0,3}#{1,6}\s*(.+?)\s*$", line)
+    if markdown_match:
+        return normalize_heading(markdown_match.group(1))
+
+    text = strip_markdown(line)
+    if not re.match(r"^(?:第?[一二三四五六七八九十]+|[0-9]+)[、.．]\s*", text):
+        return ""
+    heading = normalize_heading(text)
+    known_sections = ("安全通告", "漏洞信息", "漏洞描述", "影响范围", "修复方案", "修复建议", "参考资料", "产品能力覆盖")
+    if any(section in heading for section in known_sections):
+        return heading
+    return ""
+
+
+def is_fix_subheading(heading: str) -> bool:
+    return heading in {"官方修复方案", "临时缓解方案", "官方修复建议", "临时缓解建议"}
+
+
 def normalize_heading(text: str) -> str:
     text = strip_markdown(text)
-    text = re.sub(r"^[一二三四五六七八九十0-9]+[、.．]\s*", "", text)
+    text = re.sub(r"^(?:第?[一二三四五六七八九十]+|[0-9]+)[、.．]\s*", "", text)
     return text.replace(" ", "")
 
 
@@ -322,7 +345,7 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
             impact_lines.append(f"{label}：{value}")
     data.impact = impact_lines
 
-    fix_body = find_section(sections, "修复方案")
+    fix_body = find_section(sections, "修复方案") or find_section(sections, "修复建议")
     data.official_fix, data.temporary_fix = split_fix_section(fix_body)
 
     ref_body = find_section(sections, "参考资料")
@@ -347,13 +370,12 @@ def block_to_html(block: str) -> str:
     block = block.strip()
     if not block:
         return ""
-    if block.startswith("```") and block.endswith("```"):
-        code = block.strip("`").strip()
-        return (
-            '<pre style="margin:12px 0;padding:12px;border-radius:4px;background:#f8f8f8;'
-            'border:1px solid #d9d9d9;color:#3e3e3e;font-size:13px;line-height:1.7;'
-            f'white-space:pre-wrap;word-break:break-all;"><code>{escape(code)}</code></pre>'
-        )
+    if "```" in block:
+        return mixed_block_to_html(block)
+    return text_block_to_html(block)
+
+
+def text_block_to_html(block: str) -> str:
     lines = block.splitlines()
     if all(re.match(r"^\s*[-*]\s+", line) for line in lines if line.strip()):
         items = [re.sub(r"^\s*[-*]\s+", "", line).strip() for line in lines if line.strip()]
@@ -362,6 +384,50 @@ def block_to_html(block: str) -> str:
         items = [re.sub(r"^\s*\d+\.\s+", "", line).strip() for line in lines if line.strip()]
         return ordered_list(items)
     return paragraph(strip_markdown(block))
+
+
+def mixed_block_to_html(block: str) -> str:
+    parts: list[str] = []
+    text_lines: list[str] = []
+    code_lines: list[str] = []
+    in_code = False
+
+    def flush_text() -> None:
+        if text_lines:
+            rendered = text_block_to_html("\n".join(text_lines).strip())
+            if rendered:
+                parts.append(rendered)
+            text_lines.clear()
+
+    def flush_code() -> None:
+        if code_lines:
+            parts.append(code_block_html("\n".join(code_lines).strip()))
+            code_lines.clear()
+
+    for line in block.splitlines():
+        if line.strip().startswith("```"):
+            if in_code:
+                flush_code()
+                in_code = False
+            else:
+                flush_text()
+                in_code = True
+            continue
+        if in_code:
+            code_lines.append(line)
+        else:
+            text_lines.append(line)
+    flush_code()
+    flush_text()
+    return "\n".join(parts)
+
+
+def code_block_html(code: str) -> str:
+    return (
+        '<pre style="margin:12px 0;padding:12px;border-radius:4px;background:#f8f8f8;'
+        'border:1px solid #d9d9d9;color:#3e3e3e;font-size:13px;line-height:1.7;'
+        f'white-space:pre-wrap;word-break:break-all;"><code>{escape(code)}</code></pre>'
+    )
 
 
 def blocks_html(blocks: Iterable[str]) -> str:

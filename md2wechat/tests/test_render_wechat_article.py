@@ -99,6 +99,36 @@ class RenderWechatArticleTests(unittest.TestCase):
         for marker in forbidden:
             self.assertNotIn(marker, output)
 
+    def test_bare_numbered_headings_after_html_tables_are_sections(self) -> None:
+        markdown = SAMPLE.replace("# 二、 修复方案", "三、修复方案").replace("# 三、 参考资料", "四、参考资料")
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "bare-headings.md"
+            source.write_text(markdown, encoding="utf-8")
+            data = parse_alert(markdown, source)
+            output = render(data, DEFAULT_TEMPLATE)
+
+        self.assertIn("升级至 2.0.1", output)
+        self.assertIn("限制公网访问", output)
+        self.assertIn("https://example.com/advisory", output)
+
+    def test_fix_subheadings_stay_in_fix_section(self) -> None:
+        markdown = SAMPLE.replace(
+            "升级至 2.0.1。",
+            "Debian/Ubuntu:\n```bash\nsudo apt update && sudo apt upgrade flatpak\n```",
+        )
+        markdown = markdown.replace("启用 WAF 规则。", "限制权限：\n```bash\nflatpak override --filesystem=none <app-id>\n```")
+        markdown = markdown.replace("官方修复方案:", "### 官方修复方案").replace("临时缓解方案:", "### 临时缓解方案")
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "fix-subheadings.md"
+            source.write_text(markdown, encoding="utf-8")
+            data = parse_alert(markdown, source)
+            output = render(data, DEFAULT_TEMPLATE)
+
+        self.assertIn("sudo apt update &amp;&amp; sudo apt upgrade flatpak", output)
+        self.assertIn("限制公网访问", output)
+        self.assertIn("flatpak override --filesystem=none &lt;app-id&gt;", output)
+        self.assertIn("<pre", output)
+
 
 if __name__ == "__main__":
     unittest.main()
