@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import html
 import re
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from typing import Iterable
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = SKILL_ROOT / "assets" / "wechat-alert-article-template.placeholders.html"
+DEFAULT_HEADER_IMAGE = SKILL_ROOT / "assets" / "logo.png"
 
 FORBIDDEN_OUTPUT = ("<style", "<script", "class=", "contenteditable=", "ProseMirror", "onclick=")
 
@@ -360,9 +362,10 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
 
 def paragraph(text: str) -> str:
     return (
-        '<p style="-webkit-tap-highlight-color:transparent;letter-spacing:0.544px;'
-        'font-size:15px;word-break:break-all;line-height:2;margin:0 0 15px 0;">'
-        f'<span style="font-size:15px;letter-spacing:0.544px;color:#3e3e3e;">{escape(text)}</span></p>'
+        '<section style="-webkit-tap-highlight-color:transparent;padding:0px 15px;'
+        'letter-spacing:0.544px;line-height:2;box-sizing:border-box;">'
+        '<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;">'
+        f'<span style="font-size:15px;">{escape(text)}</span></p></section>'
     )
 
 
@@ -450,26 +453,33 @@ def ordered_list(items: Iterable[str]) -> str:
 
 def section_title(title: str) -> str:
     return f'''<section style="-webkit-tap-highlight-color:transparent;margin:20px 0px 15px;letter-spacing:0.544px;display:flex;flex-flow:row;text-align:center;justify-content:center;">
-  <section style="-webkit-tap-highlight-color:transparent;margin-right:4px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
-    <section style="-webkit-tap-highlight-color:transparent;display:inline-block;width:3px;height:10px;vertical-align:top;overflow:hidden;background-color:#4577da;"></section>
+  <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:4px;margin-bottom:unset;margin-left:0px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
+    <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:0px;margin-bottom:unset;margin-left:0px;transform-style:flat;transform:perspective(0px);-webkit-transform:perspective(0px);">
+    <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:0px;margin-bottom:unset;margin-left:0px;transform:rotateX(180deg);-webkit-transform:rotateX(180deg);">
+    <section style="-webkit-tap-highlight-color:transparent;display:inline-block;width:3px;height:16px;vertical-align:top;overflow:hidden;background-color:#4577da;box-sizing:border-box;">
+    <svg viewBox="0 0 1 1" style="float:left;line-height:0;width:0;vertical-align:top;" role="img" aria-label="插图"></svg></section></section></section>
   </section>
   <section style="-webkit-tap-highlight-color:transparent;padding:0px 12px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 auto;align-self:flex-end;min-width:10%;height:auto;box-sizing:border-box;">
-    <section style="-webkit-tap-highlight-color:transparent;text-align:justify;font-size:17px;"><p style="-webkit-tap-highlight-color:transparent;margin:0;"><strong>{escape(title)}</strong></p></section>
-    <section style="-webkit-tap-highlight-color:transparent;margin-top:2px;"><section style="-webkit-tap-highlight-color:transparent;background-color:#4577da;height:1px;"></section></section>
+    <section style="-webkit-tap-highlight-color:transparent;text-align:justify;font-size:17px;"><p style="-webkit-tap-highlight-color:transparent;margin:0;"><strong style="-webkit-tap-highlight-color:transparent;"><span style="-webkit-tap-highlight-color:transparent;">{escape(title)}</span></strong></p></section>
+    <section style="-webkit-tap-highlight-color:transparent;margin-top:2px;"><section style="-webkit-tap-highlight-color:transparent;background-color:#4577da;height:1px;box-sizing:border-box;"><svg viewBox="0 0 1 1" style="float:left;line-height:0;width:0;vertical-align:top;" role="img" aria-label="插图"></svg></section></section>
   </section>
-  <section style="-webkit-tap-highlight-color:transparent;margin-left:4px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
-    <section style="-webkit-tap-highlight-color:transparent;display:inline-block;width:3px;height:16px;vertical-align:top;overflow:hidden;background-color:#4577da;"></section>
+  <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:0px;margin-bottom:unset;margin-left:4px;display:inline-block;vertical-align:bottom;width:auto;flex:0 0 0%;height:auto;align-self:flex-end;">
+    <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:0px;margin-bottom:unset;margin-left:0px;transform-style:flat;transform:perspective(0px);-webkit-transform:perspective(0px);">
+    <section style="-webkit-tap-highlight-color:transparent;margin-top:0px;margin-right:0px;margin-bottom:unset;margin-left:0px;transform:rotateX(180deg);-webkit-transform:rotateX(180deg);">
+    <section style="-webkit-tap-highlight-color:transparent;display:inline-block;width:3px;height:10px;vertical-align:top;overflow:hidden;background-color:#4577da;box-sizing:border-box;">
+    <svg viewBox="0 0 1 1" style="float:left;line-height:0;width:0;vertical-align:top;" role="img" aria-label="插图"></svg></section></section></section>
   </section>
 </section>'''
 
 
 def sub_title(title: str) -> str:
     return (
-        '<section style="margin:20px 0 10px 0;">'
-        '<span style="display:inline-block;width:8px;height:8px;margin-right:8px;background:#f8c025;transform:rotate(45deg);vertical-align:middle;"></span>'
-        '<span style="display:inline-block;width:8px;height:8px;margin-right:8px;background:#4577da;transform:rotate(45deg);vertical-align:middle;"></span>'
-        f'<span style="color:#666666;font-size:15px;font-weight:800;vertical-align:middle;">{escape(title)}</span>'
-        '</section>'
+        '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;'
+        'letter-spacing:0.544px;text-align:left;justify-content:flex-start;display:flex;flex-flow:row;">'
+        '<section style="-webkit-tap-highlight-color:transparent;display:inline-block;vertical-align:middle;'
+        'width:auto;min-width:10%;flex:0 0 auto;height:auto;align-self:center;">'
+        '<section style="-webkit-tap-highlight-color:transparent;font-size:15px;text-align:justify;'
+        f'color:#3e3e3e;line-height:2;"><p style="-webkit-tap-highlight-color:transparent;margin:0;"><strong>{escape(title)}</strong></p></section></section></section>'
     )
 
 
@@ -522,14 +532,16 @@ def render_description(data: AlertData) -> str:
     parts = []
     if data.product_intro:
         parts.append(paragraph(data.product_intro))
-    parts.append(blocks_html(data.description))
+    for desc in data.description:
+        parts.append(paragraph(desc))
     return section_title("漏洞描述") + "\n" + "\n".join(part for part in parts if part)
 
 
 def render_impact(data: AlertData) -> str:
     if not data.impact:
         return ""
-    return section_title("影响范围") + "\n" + unordered_list(data.impact)
+    items = "\n".join(paragraph(item) for item in data.impact)
+    return section_title("影响范围") + "\n" + items
 
 
 def render_fix(data: AlertData) -> str:
@@ -549,12 +561,17 @@ def render_references(urls: list[str]) -> str:
     if not urls:
         return ""
     rows = [section_title("参考资料")]
-    for index, url in enumerate(urls, 1):
+    items_html = ""
+    for url in urls:
         safe_url = escape(url)
-        rows.append(
-            '<p style="margin:0 0 8px 0;color:#888888;font-size:12px;letter-spacing:0.57834px;word-break:break-all;">'
-            f'[{index}] <a href="{safe_url}" style="color:#4577da;text-decoration:none;word-break:break-all;">{safe_url}</a></p>'
+        items_html += (
+            '<section><span leaf="" style="color:rgb(136,136,136);font-size:12px;'
+            'letter-spacing:0.57834px;font-family:&quot;PingFang SC&quot;, system-ui, -apple-system, '
+            '&quot;system-ui&quot;, &quot;Helvetica Neue&quot;, &quot;Hiragino Sans GB&quot;, '
+            '&quot;Microsoft YaHei UI&quot;, &quot;Microsoft YaHei&quot;, Arial, sans-serif;">'
+            f'{safe_url}</span></section>\n'
         )
+    rows.append(items_html.rstrip())
     return "\n".join(rows)
 
 
@@ -581,8 +598,37 @@ def render_product_coverage(rows: list[list[str]]) -> str:
     return "\n".join(rendered)
 
 
+def render_header(data: AlertData) -> str:
+    if not DEFAULT_HEADER_IMAGE.is_file():
+        return ""
+    encoded = base64.b64encode(DEFAULT_HEADER_IMAGE.read_bytes()).decode()
+    return (
+        '<section dir="ltr" style="-webkit-tap-highlight-color:transparent;margin:10px 0px;'
+        'letter-spacing:0.544px;text-align:center;line-height:0;">'
+        '<section style="-webkit-tap-highlight-color:transparent;margin:0;vertical-align:middle;'
+        'display:inline-block;line-height:0;">'
+        f'<img src="data:image/png;base64,{encoded}" alt="安恒信息安全通告" '
+        'style="-webkit-tap-highlight-color:transparent;border-radius:initial;'
+        'background-color:transparent !important;background-size:0px !important;'
+        'vertical-align:bottom;width:100%;max-width:578px;height:auto;display:block;margin:0 auto;" />'
+        '</section></section>'
+    )
+
+
 def render_support() -> str:
-    return section_title("技术支持") + "\n" + paragraph("如有漏洞相关需求支持请联系400-6059-110获取相关能力支撑。")
+    items = paragraph("如有漏洞相关需求支持请联系400-6059-110获取相关能力支撑。")
+    # Wrap the phone number in a section matching reference style
+    return section_title("技术支持") + "\n" + items
+
+
+def render_disclaimer() -> str:
+    return (
+        '<section style="margin:26px 0 0 0;padding:12px 14px;border-radius:10px;'
+        'background:#f8fafc;border:1px solid #e5e7eb;">'
+        '<p style="margin:0;color:#8a8f99;font-size:13px;line-height:1.8;text-align:justify;word-break:break-all;">'
+        '<span>本文由产品安全研究部根据公开信息整理，仅供安全加固和风险排查参考。'
+        '请结合实际业务环境评估影响范围并及时完成修复。</span></p></section>'
+    )
 
 
 def validate_html(output: str) -> None:
@@ -595,6 +641,7 @@ def validate_html(output: str) -> None:
 def render(data: AlertData, template: Path) -> str:
     html_template = template.read_text(encoding="utf-8")
     values = {
+        "header_html": render_header(data),
         "overview_table": render_overview(data),
         "intro_html": "\n".join(paragraph(item) for item in data.intro if item != data.reproduction_note),
         "reproduction_html": render_reproduction(data.reproduction_note),
@@ -604,6 +651,7 @@ def render(data: AlertData, template: Path) -> str:
         "references_section": render_references(data.references),
         "product_coverage_section": render_product_coverage(data.product_coverage),
         "technical_support_section": render_support(),
+        "disclaimer_section": render_disclaimer(),
     }
     output = html_template
     for key, value in values.items():

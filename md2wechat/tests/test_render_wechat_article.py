@@ -104,14 +104,33 @@ class RenderWechatArticleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "sample.md"
             source.write_text(titled, encoding="utf-8")
+            (Path(tmp) / "logo.JPG").write_bytes(b"source-logo-should-not-be-used")
             data = parse_alert(titled, source)
             output = render(data, DEFAULT_TEMPLATE)
 
         self.assertNotIn("IMG:banner", output)
-        self.assertNotIn("<img", output.lower())
+        self.assertIn("<img", output.lower())
+        self.assertIn("data:image/png;base64,", output)
         self.assertNotIn("<h1", output.lower())
         self.assertNotIn("logo.JPG", output)
+        self.assertNotIn("source-logo-should-not-be-used", output)
+        self.assertNotIn("font-weight:bold;line-height:1.6;text-align:center", output)
         self.assertIn("max-width:578px", output)
+
+    def test_body_starts_with_fixed_banner_then_overview_table(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "sample.md"
+            source.write_text(SAMPLE, encoding="utf-8")
+            data = parse_alert(SAMPLE, source)
+            output = render(data, DEFAULT_TEMPLATE)
+
+        first_img = output.lower().find("<img")
+        overview = output.find("漏洞概述")
+        body_title = output.find("测试组件存在远程代码执行漏洞")
+
+        self.assertGreaterEqual(first_img, 0)
+        self.assertGreater(overview, first_img)
+        self.assertGreater(body_title, overview)
 
     def test_bare_numbered_headings_after_html_tables_are_sections(self) -> None:
         markdown = SAMPLE.replace("# 二、 修复方案", "三、修复方案").replace("# 三、 参考资料", "四、参考资料")
