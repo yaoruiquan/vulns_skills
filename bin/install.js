@@ -8,8 +8,8 @@ function printHelp() {
   console.log(`Install Product Security Research AI-Skills.
 
 Usage:
-  npx @yaoruiquan/vulns-skills
-  npx @yaoruiquan/vulns-skills -- --help
+  npx @yaoruiquan4/vulns-skills
+  npx @yaoruiquan4/vulns-skills -- --help
 
 This package is only a lightweight installer. It does not bundle the skills.
 It runs:

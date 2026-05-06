@@ -46,7 +46,7 @@ claude --version
 推荐使用 `npx` 一条命令安装：
 
 ```bash
-npx @yaoruiquan/vulns-skills
+npx @yaoruiquan4/vulns-skills
 ```
 
 这个 npm 包只是轻量安装器，不打包本仓库的所有 skill 内容。它会在本机执行：
