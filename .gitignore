@@ -7,6 +7,9 @@
 !.git
 !.gitignore
 !README.md
+!package.json
+!bin/
+!bin/**
 
 # 白名单：只包含已发布维护的 skills
 !cnvd-weekly-db-update/

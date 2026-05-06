@@ -1,0 +1,34 @@
+{
+  "name": "@yaoruiquan/vulns-skills",
+  "version": "1.0.0",
+  "description": "Lightweight installer for product security research AI skills.",
+  "bin": {
+    "vulns-skills": "bin/install.js"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaoruiquan/vulns_skills.git"
+  },
+  "homepage": "https://github.com/yaoruiquan/vulns_skills#readme",
+  "bugs": {
+    "url": "https://github.com/yaoruiquan/vulns_skills/issues"
+  },
+  "keywords": [
+    "claude",
+    "skills",
+    "security",
+    "vulnerability",
+    "ai"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

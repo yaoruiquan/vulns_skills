@@ -43,11 +43,19 @@ claude --version
 
 ### 2. 安装 skills
 
-如果使用 HTTPS 地址，通常不需要 SSH key：
+推荐使用 `npx` 一条命令安装：
+
+```bash
+npx @yaoruiquan/vulns-skills
+```
+
+这个 npm 包只是轻量安装器，不打包本仓库的所有 skill 内容。它会在本机执行：
 
 ```bash
 claude skills install https://github.com/yaoruiquan/vulns_skills.git
 ```
+
+如果不想使用 `npx`，也可以直接运行上面的 `claude skills install` 命令。使用 HTTPS 地址通常不需要 SSH key。
 
 如果使用公司内网 GitLab 或 SSH 地址，按下面“没有 SSH key 怎么办”先配置访问权限。
 
@@ -126,6 +134,32 @@ ssh <user>@<upload-host>
 ```
 
 如果暂时没有 SSH key，也可以在本机 `.env` 中配置 `REPORT_UPLOAD_PASSWORD` 作为临时方案。密码只能保存在本机 `.env`，不要写入 `.env.example`、README、聊天记录或提交到 Git。
+
+## 维护 npm 安装器
+
+根目录的 `package.json` 和 `bin/install.js` 只用于发布轻量 npm 安装器。npm 包内容只包含安装脚本和 README，真正的 skills 仍从 GitHub 仓库安装。
+
+发布前检查：
+
+```bash
+node --check bin/install.js
+npm pack --dry-run
+```
+
+首次发布：
+
+```bash
+npm login
+npm publish --access public
+```
+
+后续更新安装器本身时，先提升 `package.json` 的 `version`，再执行：
+
+```bash
+npm publish --access public
+```
+
+如果只是更新 skills 内容，不需要重新发布 npm 包；把 GitHub 仓库更新并推送即可。
 
 ## 维护者
 
