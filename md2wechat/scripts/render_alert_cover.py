@@ -31,6 +31,8 @@ def read_markdown_metadata(markdown_path: Path) -> dict[str, str]:
             break
     if not title:
         title = markdown_path.stem
+    # 去除标题前缀标记如 【已复现】、【风险通告】、【漏洞预警】等
+    title = re.sub(r"^【[^】]*】\s*", "", title)
     cve_match = CVE_PATTERN.search(text)
     level_match = LEVEL_PATTERN.search(text)
     summary = ""
@@ -130,13 +132,18 @@ def draw_template_cover(
             "/Users/yao/Library/Fonts/SourceHanSansSC-Bold.otf",
             "/Library/Fonts/SourceHanSansCN-Bold.otf",
             "/Library/Fonts/SourceHanSansSC-Bold.otf",
-            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
             "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/PingFang.ttc",
             "/Library/Fonts/Arial Unicode.ttf",
         ]
         for path in candidates:
             if Path(path).is_file():
-                return ImageFont.truetype(path, size=size)
+                try:
+                    return ImageFont.truetype(path, size=size)
+                except OSError:
+                    continue
         return ImageFont.load_default()
 
     option_font = font(17)
@@ -145,22 +152,16 @@ def draw_template_cover(
         draw.rounded_rectangle([54, 92, 842, 265], radius=8, fill=(244, 250, 250))
 
     title_box_width = 540
-    title_font_size = 24
+    title_font_size = 36
     title_font = font(title_font_size)
-    title_lines: list[str] = []
-    while title_font_size >= 18:
-        title_font = font(title_font_size)
-        title_lines = wrap_text_by_pixels(values["TITLE"], draw, title_font, title_box_width)
-        if len(title_lines) <= 3:
-            break
-        title_font_size -= 2
-    title_lines = title_lines[:3]
-    y = 104
+    title_lines = wrap_text_by_pixels(values["TITLE"], draw, title_font, title_box_width)[:3]
+    line_height = 48
+    y = 105
     for line in title_lines:
         draw.text((70, y), line, fill="#34294B", font=title_font)
-        y += int(title_font_size * 1.28)
+        y += line_height
 
-    line_y = max(220, y + 4)
+    line_y = max(220, y + 2)
     draw.line([70, line_y, 545, line_y], fill="#34294B", width=2)
 
     options = [
@@ -175,7 +176,10 @@ def draw_template_cover(
         option_y = line_y + 23
         box = [x, option_y, x + 15, option_y + 15]
         draw.rectangle(box, outline="#34294B", width=1, fill="#BFEFD6" if checked else None)
-        draw.text((x + 28, option_y - 6), label, fill="#34294B", font=option_font)
+        bbox = draw.textbbox((0, 0), label, font=option_font)
+        text_h = bbox[3] - bbox[1]
+        text_y = option_y + (15 - text_h) // 2
+        draw.text((x + 28, text_y), label, fill="#34294B", font=option_font)
         x += 83 if label in {"POC", "EXP"} else 112
 
     output.parent.mkdir(parents=True, exist_ok=True)

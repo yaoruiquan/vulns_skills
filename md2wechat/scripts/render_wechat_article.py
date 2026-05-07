@@ -6,7 +6,11 @@ from __future__ import annotations
 import argparse
 import base64
 import html
+import os
 import re
+import urllib.request
+import urllib.parse
+import json as json_lib
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -25,6 +29,7 @@ class AlertData:
     title: str = ""
     intro: list[str] = field(default_factory=list)
     reproduction_note: str = ""
+    reproduction_images: list[Path] = field(default_factory=list)
     product_intro: str = ""
     description: list[str] = field(default_factory=list)
     impact: list[str] = field(default_factory=list)
@@ -162,6 +167,51 @@ def normalize_heading(text: str) -> str:
     return text.replace(" ", "")
 
 
+def find_reproduction_screenshots(source: Path, title: str) -> list[Path]:
+    """Find reproduction screenshots in the same directory as the markdown file.
+
+    Matches are determined by extracting identifiers from the title (CVE ID,
+    product name keywords) and looking for image files in the source directory
+    that match those identifiers or common screenshot naming patterns.
+    """
+    directory = source.parent
+    if not directory.is_dir():
+        return []
+
+    cve_match = re.search(r"CVE-\d{4}-\d{4,}", title, re.I)
+    cve_id = cve_match.group(0) if cve_match else None
+    source_stem = source.stem
+
+    image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+    image_files = sorted(
+        f for f in directory.iterdir()
+        if f.is_file() and f.suffix.lower() in image_extensions
+    )
+
+    if not image_files:
+        return []
+
+    matched: list[Path] = []
+    unmatched: list[Path] = []
+    screenshot_pattern = re.compile(r"复现|截图|reproduce|screenshot|图\d+", re.I)
+
+    for f in image_files:
+        name_lower = f.stem.lower()
+        if cve_id and cve_id.lower() in name_lower:
+            matched.append(f)
+        elif source_stem.lower() in name_lower and source_stem.lower():
+            matched.append(f)
+        elif screenshot_pattern.search(name_lower):
+            matched.append(f)
+        else:
+            unmatched.append(f)
+
+    result = sorted(matched, key=lambda p: p.stem)
+    if not result:
+        result = sorted(unmatched, key=lambda p: p.stem)
+    return result
+
+
 def find_section(sections: dict[str, str], *keywords: str) -> str:
     for heading, body in sections.items():
         if all(keyword in heading for keyword in keywords):
@@ -211,8 +261,17 @@ def plain_paragraphs(text: str) -> list[str]:
 
 
 def extract_title(markdown: str, overview: dict[str, str], source: Path) -> str:
+    src_prefix = ""
+    stem = source.stem
+    prefix_match = re.match(r"^(【[^】]*】)", stem)
+    if prefix_match:
+        src_prefix = prefix_match.group(1)
+
     if overview.get("漏洞标题") or overview.get("漏洞名称"):
-        return overview.get("漏洞标题") or overview.get("漏洞名称") or source.stem
+        title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
+        if src_prefix and not title.startswith("【"):
+            title = f"{src_prefix}{title}"
+        return title
     in_code = False
     for line in markdown.splitlines():
         if line.strip().startswith("```"):
@@ -224,8 +283,13 @@ def extract_title(markdown: str, overview: dict[str, str], source: Path) -> str:
         if match:
             title = strip_markdown(match.group(1))
             if not re.match(r"^[一二三四五六七八九十0-9]+[、.．]", title):
+                if src_prefix and not title.startswith("【"):
+                    title = f"{src_prefix}{title}"
                 return title
-    return overview.get("漏洞标题") or overview.get("漏洞名称") or source.stem
+    title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
+    if src_prefix and not title.startswith("【"):
+        title = f"{src_prefix}{title}"
+    return title
 
 
 def table_to_key_values(table: list[list[str]]) -> dict[str, str]:
@@ -318,6 +382,7 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     sections = split_sections(markdown)
     data = AlertData(overview=overview)
     data.title = extract_title(markdown, overview, source)
+    data.reproduction_images = find_reproduction_screenshots(source, data.title)
 
     preface = plain_paragraphs(sections.get("__preface__", ""))
     notice = plain_paragraphs(find_section(sections, "安全通告"))
@@ -325,19 +390,34 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     if not data.intro:
         data.intro = [overview.get("危害描述", "")]
     data.intro = [item for item in data.intro if item]
+    data.intro = [item for item in data.intro if not item.startswith("近日") and not item.startswith("近期")]
 
     for paragraph in data.intro:
         if "已复现" in paragraph or "完成技术分析" in paragraph or "卫兵实验室" in paragraph:
             data.reproduction_note = paragraph
             break
 
+    # 从正文intro中提取漏洞描述作为危害描述（去掉"近日..."监测类前缀）
+    if data.intro and not overview.get("危害描述") or overview.get("危害描述") in ("", "待确认"):
+        for p in data.intro:
+            # 提取 "技术细节及PoC已公开，" 之后的版本和影响描述
+            for sep in ("技术细节及PoC已公开，", "技术细节已公开，"):
+                if sep in p:
+                    desc = p.split(sep, 1)[1].strip()
+                    if desc:
+                        overview["危害描述"] = desc
+                        break
+            if overview.get("危害描述"):
+                break
+
     vuln_info = find_section(sections, "漏洞信息")
     vuln_paragraphs = plain_paragraphs(vuln_info)
     if vuln_paragraphs:
         data.product_intro = vuln_paragraphs[0]
     explicit_description = plain_paragraphs(find_section(sections, "漏洞描述"))
-    data.description = explicit_description or vuln_paragraphs[:2]
-    if not data.description and overview.get("危害描述"):
+    if explicit_description:
+        data.description = explicit_description
+    elif not data.description and overview.get("危害描述"):
         data.description = [overview["危害描述"]]
 
     impact_lines = []
@@ -508,7 +588,7 @@ def render_overview(data: AlertData) -> str:
         f"<tr>{label_cell('CNNVD编号')}{cell(first_matching_value(o, 'CNNVD编号'))}{label_cell('安恒CERT编号')}{cell(first_matching_value(o, '安恒CERT编号'))}</tr>",
         f"<tr>{label_cell('POC情况')}{cell(first_matching_value(o, 'Poc情况', 'POC情况', default='待确认'))}{label_cell('EXP情况')}{cell(first_matching_value(o, 'Exp情况', 'EXP情况', default='待确认'))}</tr>",
         f"<tr>{label_cell('在野利用')}{cell(first_matching_value(o, '在野利用', default='待确认'))}{label_cell('研究情况')}{cell(first_matching_value(o, '研究情况', default='待确认'))}</tr>",
-        f"<tr>{label_cell('危害描述')}{cell(first_matching_value(o, '危害描述', default=(data.description[0] if data.description else '待确认')), colspan=3)}</tr>",
+        f"<tr>{label_cell('危害描述')}{cell(first_matching_value(o, '危害描述', default='待确认'), colspan=3)}</tr>",
     ]
     return (
         '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;min-height:40px;">'
@@ -522,10 +602,74 @@ def render_reproduction(note: str) -> str:
     if not note:
         return ""
     return (
-        '<section style="margin:14px 0;padding:10px 12px;border-left:4px solid #f8c025;background:#fff8df;">'
-        f'<p style="margin:0;color:#3e3e3e;font-size:15px;line-height:1.9;"><strong>{escape(note)}</strong></p>'
-        "</section>"
+        '<section style="-webkit-tap-highlight-color:transparent;padding:0px 15px;'
+        'letter-spacing:0.544px;line-height:2;box-sizing:border-box;">'
+        '<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;">'
+        f'<span style="font-size:15px;"><strong>{escape(note)}</strong></span></p></section>'
     )
+
+
+def image_to_base64_html(image_path: Path) -> str:
+    """Convert an image file to a base64-encoded HTML img tag for WeChat.
+
+    Images are resized to max 578px width and compressed to JPEG quality 80
+    to stay within WeChat's content size limit.
+    """
+    from PIL import Image as PILImage
+    import io
+
+    try:
+        img = PILImage.open(image_path)
+        orig_w, orig_h = img.size
+        max_w = 578
+        if orig_w > max_w:
+            ratio = max_w / orig_w
+            new_w = max_w
+            new_h = int(orig_h * ratio)
+            img = img.resize((new_w, new_h), PILImage.LANCZOS)
+
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80, optimize=True)
+        encoded = base64.b64encode(buf.getvalue()).decode()
+        mime = "image/jpeg"
+    except ImportError:
+        with open(image_path, "rb") as fh:
+            encoded = base64.b64encode(fh.read()).decode()
+        ext = image_path.suffix.lower().lstrip(".")
+        mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                    "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp"}
+        mime = mime_map.get(ext, "image/png")
+
+    alt = escape(image_path.stem)
+    return (
+        '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;'
+        'letter-spacing:0.544px;text-align:center;line-height:0;">'
+        '<section style="-webkit-tap-highlight-color:transparent;margin:0;vertical-align:middle;'
+        'display:inline-block;line-height:0;">'
+        f'<img src="data:{mime};base64,{encoded}" alt="{alt}" '
+        'style="-webkit-tap-highlight-color:transparent;border-radius:initial;'
+        'background-color:transparent !important;background-size:0px !important;'
+        'vertical-align:bottom;width:100%;max-width:578px;height:auto;display:block;margin:0 auto;" />'
+        '</section></section>'
+    )
+
+
+def render_reproduction_images(images: list[Path]) -> str:
+    """Render reproduction screenshots as inline base64 images."""
+    if not images:
+        return ""
+    parts = []
+    for img in images:
+        try:
+            parts.append(image_to_base64_html(img))
+        except (OSError, ValueError):
+            continue
+    if not parts:
+        return ""
+    return "\n".join(parts)
 
 
 def render_description(data: AlertData) -> str:
@@ -638,20 +782,162 @@ def validate_html(output: str) -> None:
             raise ValueError(f"forbidden output marker found: {forbidden}")
 
 
+def vuln_sub_title(title: str) -> str:
+    return (
+        '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;'
+        'letter-spacing:0.544px;text-align:left;justify-content:flex-start;display:flex;flex-flow:row;">'
+        '<section style="-webkit-tap-highlight-color:transparent;display:inline-block;vertical-align:middle;'
+        'width:auto;line-height:0;min-width:10%;flex:0 0 auto;height:auto;align-self:center;">'
+        '<section style="-webkit-tap-highlight-color:transparent;transform:rotateZ(45deg);'
+        '-webkit-transform:rotateZ(45deg);"><section style="-webkit-tap-highlight-color:transparent;text-align:center;">'
+        '<section style="display:inline-block;width:15px;height:4px;vertical-align:top;overflow:hidden;'
+        'background-color:#f8c025;border-width:0px;border-radius:10px;border-style:none;'
+        'border-color:rgb(62,62,62);box-shadow:rgb(0,0,0)0px 0px 0px;box-sizing:border-box;">'
+        '<svg viewBox="0 0 1 1" style="letter-spacing:0.544px;font-size:15px;word-break:break-all;"'
+        ' role="img" aria-label="插图"></svg></section></section></section>'
+        '<section style="-webkit-tap-highlight-color:transparent;transform:rotateZ(315deg);'
+        '-webkit-transform:rotateZ(315deg);"><section style="-webkit-tap-highlight-color:transparent;'
+        'margin:4px 0px 5px;text-align:center;">'
+        '<section style="display:inline-block;width:14px;height:4px;vertical-align:top;overflow:hidden;'
+        'background-color:#4577da;border-width:0px;border-radius:10px;border-style:none;'
+        'border-color:rgb(62,62,62);box-sizing:border-box;">'
+        '<svg viewBox="0 0 1 1" style="letter-spacing:0.544px;font-size:15px;word-break:break-all;"'
+        ' role="img" aria-label="插图"></svg></section></section></section></section>'
+        '<section style="-webkit-tap-highlight-color:transparent;display:inline-block;vertical-align:middle;'
+        'width:auto;min-width:10%;flex:0 0 auto;height:auto;align-self:center;">'
+        '<section style="-webkit-tap-highlight-color:transparent;">'
+        '<section style="-webkit-tap-highlight-color:transparent;font-size:15px;text-align:justify;'
+        f'color:#666666;line-height:2;"><p style="-webkit-tap-highlight-color:transparent;margin:0;">'
+        f'<strong style="-webkit-tap-highlight-color:transparent;"><span>{escape(title)}</span></strong>'
+        "</p></section></section></section></section>"
+    )
+
+
+
+
+def render_vuln_info(data: AlertData) -> str:
+    parts = []
+
+    # product intro paragraph
+    if data.product_intro:
+        parts.append(paragraph(data.product_intro))
+
+    # 漏洞描述 sub-section
+    o = data.overview
+    severity = first_matching_value(o, "漏洞危害等级", "漏洞处置等级", default="")
+    vuln_type = o.get("漏洞类型", "")
+    if severity or vuln_type:
+        parts.append(vuln_sub_title("漏洞描述"))
+        desc_lines = ""
+        if severity:
+            desc_lines += f'<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;"><span style="font-size:15px;"><strong>漏洞危害等级：</strong>{escape(severity)}</span></p>\n'
+        if vuln_type:
+            desc_lines += f'<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;"><span style="font-size:15px;"><strong>漏洞类型：</strong>{escape(vuln_type)}</span></p>\n'
+        if desc_lines:
+            parts.append(
+                '<section style="-webkit-tap-highlight-color:transparent;padding:0px 15px;'
+                'letter-spacing:0.544px;line-height:2;box-sizing:border-box;">\n'
+                + desc_lines.rstrip()
+                + '</section>'
+            )
+
+    # 影响范围 sub-section
+    version = o.get("影响版本", "")
+    if version:
+        parts.append(vuln_sub_title("影响范围"))
+        parts.append(
+            '<section style="-webkit-tap-highlight-color:transparent;padding:0px 15px;'
+            'letter-spacing:0.544px;line-height:2;box-sizing:border-box;">'
+            f'<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;">'
+            f'<span style="font-size:15px;"><strong>影响版本：</strong>{escape(version)}</span></p></section>'
+        )
+
+    # CVSS向量 sub-section
+    cvss_keys = [
+        ("访问途径（AV）", "访问途径（AV）"),
+        ("攻击复杂度（AC）", "攻击复杂度（AC）"),
+        ("所需权限（PR）", "所需权限（PR）"),
+        ("用户交互（UI）", "用户交互（UI）"),
+        ("影响范围（S）", "影响范围（S）"),
+        ("机密性影响（C）", "机密性影响（C）"),
+        ("完整性影响（I）", "完整性影响（I）"),
+        ("可用性影响（A）", "可用性影响（A）"),
+    ]
+    cvss_lines = ""
+    for key, label in cvss_keys:
+        value = o.get(key, "")
+        if value:
+            cvss_lines += f'<p style="-webkit-tap-highlight-color:transparent;margin-bottom:15px;word-break:break-all;"><span style="font-size:15px;">{escape(label)}：{escape(value)}</span></p>\n'
+    if cvss_lines:
+        parts.append(vuln_sub_title("CVSS向量"))
+        parts.append(
+            '<section style="-webkit-tap-highlight-color:transparent;padding:0px 15px;'
+            'letter-spacing:0.544px;line-height:2;box-sizing:border-box;">\n'
+            + cvss_lines.rstrip()
+            + '\n</section>'
+        )
+
+    return section_title("漏洞信息") + "\n" + "\n".join(parts)
+
+
+def upload_base64_images_to_wechat(html_content: str) -> str:
+    """Upload base64 images in HTML to WeChat material library, replacing with CDN URLs."""
+    appid = os.environ.get("WECHAT_APPID", "")
+    secret = os.environ.get("WECHAT_SECRET", "")
+    if not appid or not secret:
+        return html_content
+
+    try:
+        resp = urllib.request.urlopen(
+            f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
+        )
+        token_data = json_lib.loads(resp.read())
+        token = token_data.get("access_token", "")
+        if not token:
+            return html_content
+    except Exception:
+        return html_content
+
+    def _upload(data: bytes, filename: str, mime: str) -> str:
+        boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="media"; filename="{filename}"\r\n'
+            f"Content-Type: {mime}\r\n\r\n"
+        ).encode("utf-8") + data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        req = urllib.request.Request(
+            f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={token}&type=image",
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        result = json_lib.loads(urllib.request.urlopen(req).read())
+        return result.get("url", "")
+
+    def _replace(m: re.Match) -> str:
+        fmt = m.group(1)
+        b64 = m.group(2)
+        try:
+            img_data = base64.b64decode(b64)
+            url = _upload(img_data, f"image.{fmt}", f"image/{fmt}")
+            return url if url else m.group(0)
+        except Exception:
+            return m.group(0)
+
+    return re.sub(r'data:image/(\w+);base64,([A-Za-z0-9+/=]+)', _replace, html_content)
+
+
 def render(data: AlertData, template: Path) -> str:
     html_template = template.read_text(encoding="utf-8")
     values = {
         "header_html": render_header(data),
         "overview_table": render_overview(data),
-        "intro_html": "\n".join(paragraph(item) for item in data.intro if item != data.reproduction_note),
-        "reproduction_html": render_reproduction(data.reproduction_note),
-        "description_section": render_description(data),
-        "impact_section": render_impact(data),
+        "intro_html": "\n".join(paragraph(item) for item in data.intro if item != data.reproduction_note) + "\n" + render_reproduction(data.reproduction_note),
+        "reproduction_images_html": render_reproduction_images(data.reproduction_images),
+        "vuln_info_section": render_vuln_info(data),
         "fix_section": render_fix(data),
         "references_section": render_references(data.references),
         "product_coverage_section": render_product_coverage(data.product_coverage),
         "technical_support_section": render_support(),
-        "disclaimer_section": render_disclaimer(),
     }
     output = html_template
     for key, value in values.items():
@@ -671,6 +957,11 @@ def main() -> int:
     markdown = args.markdown_file.read_text(encoding="utf-8")
     data = parse_alert(markdown, args.markdown_file)
     output = render(data, args.template)
+
+    # Optional: upload base64 images to WeChat CDN when credentials are available
+    if os.environ.get("WECHAT_APPID") and os.environ.get("WECHAT_SECRET"):
+        output = upload_base64_images_to_wechat(output)
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(output, encoding="utf-8")
 
