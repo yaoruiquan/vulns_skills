@@ -6,6 +6,7 @@
 
 - 从漏洞预警 Markdown 提取元数据（标题、CVE、风险等级、PoC/Exp/在野/研究状态）
 - 通过 `scripts/render_wechat_article.py` 渲染对齐真实公众号模板的内联 HTML
+- 在 HTML 旁生成 `<html>.meta.json`，供草稿标题、作者和摘要使用
 - 通过 `scripts/render_alert_cover.py` 基于 PPTX 模版生成带标题和状态标签的封面图
 - 校验 HTML 合规性（禁止 `<style>`、`<script>`、`class=`、`contenteditable=` 等）
 - 通过 md2wechat CLI 或 API 上传草稿到微信公众号草稿箱
@@ -38,6 +39,7 @@ cp .env.example .env
 |------|------|
 | `SKILL.md` | agent 执行指令 |
 | `scripts/render_wechat_article.py` | 确定性 HTML 渲染脚本 |
+| `scripts/create_alert_draft.py` | 使用 HTML 旁路元数据创建带真实标题的微信公众号草稿 |
 | `scripts/render_alert_cover.py` | PPTX 封面渲染脚本 |
 | `assets/wechat-alert-article-template.placeholders.html` | 公众号正文 HTML 占位符模板 |
 | `assets/wechat-alert-article-template.html` | 公众号正文样式源文件（仅视觉参考，不直接上传） |
@@ -58,3 +60,5 @@ python3 scripts/render_alert_cover.py article.md --output /tmp/cover.png --poc t
 ./scripts/md2wechat-env.sh config validate
 ./scripts/md2wechat-env.sh test-draft /tmp/article.html /tmp/cover.png
 ```
+
+`render_wechat_article.py` 会生成 `/tmp/article.html.meta.json`。通过 `scripts/md2wechat-env.sh test-draft` 上传时，如果该元数据文件存在，wrapper 会自动上传正文图片和封面，构造 `create_draft` JSON，并保留真实文章标题。

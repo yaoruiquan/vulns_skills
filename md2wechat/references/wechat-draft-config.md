@@ -110,7 +110,7 @@ python3 scripts/render_alert_cover.py article.md --output /tmp/article-cover.png
 ./scripts/md2wechat-env.sh test-draft /tmp/article.html /tmp/article-cover.png
 ```
 
-HTML 必须由 `scripts/render_wechat_article.py` 根据占位符模板确定性生成，不要让 agent 临场手写 HTML。生成后优先使用 `test-draft <html_file> <cover_image>`。当前机器的 `md2wechat 2.1.0` 支持该命令。
+HTML 必须由 `scripts/render_wechat_article.py` 根据占位符模板确定性生成，不要让 agent 临场手写 HTML。生成后优先使用 `./scripts/md2wechat-env.sh test-draft <html_file> <cover_image>`。当前机器的 `md2wechat 2.1.0` 支持该命令；skill wrapper 会在 `<html>.meta.json` 存在时自动构造 `create_draft` JSON，保留真实标题、作者和摘要。
 
 `convert --draft` 默认走 API 模式，缺少 `MD2WECHAT_API_KEY` 时会被 `inspect --strict` 判定为不可用；除非已经配置 API key，否则不要把它作为预警流程的首选上传方式。
 

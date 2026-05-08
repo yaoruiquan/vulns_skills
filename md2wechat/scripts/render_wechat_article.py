@@ -24,6 +24,22 @@ DEFAULT_HEADER_IMAGE = SKILL_ROOT / "assets" / "logo.png"
 FORBIDDEN_OUTPUT = ("<style", "<script", "class=", "contenteditable=", "ProseMirror", "onclick=")
 
 
+def load_local_env() -> None:
+    """Load the skill-local .env when WeChat credentials are not already set."""
+    env_path = SKILL_ROOT / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if key in os.environ:
+            continue
+        os.environ[key] = value.strip().strip('"').strip("'")
+
+
 @dataclass
 class AlertData:
     title: str = ""
@@ -260,6 +276,26 @@ def plain_paragraphs(text: str) -> list[str]:
     return result
 
 
+def split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[。！？!?])\s*", strip_markdown(text))
+    return [part.strip() for part in parts if part.strip()]
+
+
+def infer_hazard_description(paragraphs: Iterable[str]) -> str:
+    marker_re = re.compile(r"危害|高危|严重|权限提升|远程代码执行|任意代码|命令执行|信息泄露|拒绝服务|绕过|接管")
+    fallback = ""
+    for paragraph_text in paragraphs:
+        for sentence in split_sentences(paragraph_text):
+            if not marker_re.search(sentence):
+                continue
+            sentence = re.sub(r"^(?:近日|近期|目前)[，,]?", "", sentence).strip()
+            sentence = re.sub(r"^安恒CERT(?:监测到|发现|关注到)[，,]?", "", sentence).strip()
+            if "危害" in sentence or "高危" in sentence or "严重" in sentence:
+                return sentence[:180]
+            fallback = fallback or sentence[:180]
+    return fallback
+
+
 def extract_title(markdown: str, overview: dict[str, str], source: Path) -> str:
     src_prefix = ""
     stem = source.stem
@@ -339,23 +375,51 @@ def extract_references(text: str) -> list[str]:
     return cleaned
 
 
+def parse_fix_heading(block: str) -> tuple[str, str] | None:
+    lines = block.strip().splitlines()
+    if not lines:
+        return None
+    first = lines[0].strip()
+    rest = "\n".join(lines[1:]).strip()
+
+    heading_text = ""
+    heading_match = re.match(r"^\s{0,3}#{1,6}\s*(.+?)\s*$", first)
+    if heading_match:
+        heading_text = strip_markdown(heading_match.group(1))
+    else:
+        first_label = strip_markdown(first)
+        if re.fullmatch(r"(?:官方修复|临时缓解)(?:方案|建议)?\s*[:：]?", first_label):
+            heading_text = first_label
+        else:
+            inline_label = re.match(r"^((?:官方修复|临时缓解)(?:方案|建议)?)\s*[:：]\s*(.+)$", first_label)
+            if inline_label:
+                heading_text = f"{inline_label.group(1)}：{inline_label.group(2)}"
+
+    if not heading_text:
+        return None
+
+    match = re.match(r"^(官方修复|临时缓解)(?:方案|建议)?\s*[:：]?\s*(.*)$", heading_text)
+    if not match:
+        return None
+    kind = "temporary" if match.group(1) == "临时缓解" else "official"
+    inline_remainder = match.group(2).strip()
+    remainder = "\n".join(item for item in (inline_remainder, rest) if item).strip()
+    return kind, remainder
+
+
 def split_fix_section(text: str) -> tuple[list[str], list[str]]:
     official: list[str] = []
     temporary: list[str] = []
     current = "official"
     for block in markdown_blocks(text):
-        label = strip_markdown(block)
-        if "临时缓解" in label:
-            current = "temporary"
-            remainder = re.sub(r"^#+\s*临时缓解方案\s*[:：]?", "", block).strip()
-            if remainder and remainder != block:
-                temporary.append(remainder)
-            continue
-        if "官方修复" in label or label.startswith("安全版本"):
-            current = "official"
-            remainder = re.sub(r"^#+\s*官方修复方案\s*[:：]?", "", block).strip()
-            if remainder and remainder != block:
-                official.append(remainder)
+        heading = parse_fix_heading(block)
+        if heading:
+            current, remainder = heading
+            if remainder:
+                if current == "temporary":
+                    temporary.append(remainder)
+                else:
+                    official.append(remainder)
             continue
         if current == "temporary":
             temporary.append(block)
@@ -386,20 +450,28 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
 
     preface = plain_paragraphs(sections.get("__preface__", ""))
     notice = plain_paragraphs(find_section(sections, "安全通告"))
-    data.intro = preface + notice
+    raw_intro = preface + notice
+    data.intro = raw_intro
     if not data.intro:
         data.intro = [overview.get("危害描述", "")]
     data.intro = [item for item in data.intro if item]
-    data.intro = [item for item in data.intro if not item.startswith("近日") and not item.startswith("近期")]
 
     for paragraph in data.intro:
         if "已复现" in paragraph or "完成技术分析" in paragraph or "卫兵实验室" in paragraph:
             data.reproduction_note = paragraph
             break
 
+    vuln_info = find_section(sections, "漏洞信息")
+    vuln_paragraphs = plain_paragraphs(vuln_info)
+
+    if (not overview.get("危害描述")) or overview.get("危害描述") in ("", "待确认"):
+        inferred = infer_hazard_description(raw_intro + vuln_paragraphs)
+        if inferred:
+            overview["危害描述"] = inferred
+
     # 从正文intro中提取漏洞描述作为危害描述（去掉"近日..."监测类前缀）
-    if data.intro and not overview.get("危害描述") or overview.get("危害描述") in ("", "待确认"):
-        for p in data.intro:
+    if ((not overview.get("危害描述")) or overview.get("危害描述") in ("", "待确认")) and raw_intro:
+        for p in raw_intro:
             # 提取 "技术细节及PoC已公开，" 之后的版本和影响描述
             for sep in ("技术细节及PoC已公开，", "技术细节已公开，"):
                 if sep in p:
@@ -410,8 +482,7 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
             if overview.get("危害描述"):
                 break
 
-    vuln_info = find_section(sections, "漏洞信息")
-    vuln_paragraphs = plain_paragraphs(vuln_info)
+    data.intro = [item for item in data.intro if not item.startswith("近日") and not item.startswith("近期")]
     if vuln_paragraphs:
         data.product_intro = vuln_paragraphs[0]
     explicit_description = plain_paragraphs(find_section(sections, "漏洞描述"))
@@ -881,7 +952,7 @@ def render_vuln_info(data: AlertData) -> str:
 
 
 def upload_base64_images_to_wechat(html_content: str) -> str:
-    """Upload base64 images in HTML to WeChat material library, replacing with CDN URLs."""
+    """Upload base64 images in HTML to WeChat article image CDN."""
     appid = os.environ.get("WECHAT_APPID", "")
     secret = os.environ.get("WECHAT_SECRET", "")
     if not appid or not secret:
@@ -906,7 +977,7 @@ def upload_base64_images_to_wechat(html_content: str) -> str:
             f"Content-Type: {mime}\r\n\r\n"
         ).encode("utf-8") + data + f"\r\n--{boundary}--\r\n".encode("utf-8")
         req = urllib.request.Request(
-            f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={token}&type=image",
+            f"https://api.weixin.qq.com/cgi-bin/media/uploadimg?access_token={token}",
             data=body,
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
@@ -952,34 +1023,35 @@ def main() -> int:
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
+    parser.add_argument("--no-upload-images", action="store_true", help="Keep local images as data URIs")
     args = parser.parse_args()
 
+    load_local_env()
     markdown = args.markdown_file.read_text(encoding="utf-8")
     data = parse_alert(markdown, args.markdown_file)
     output = render(data, args.template)
 
     # Optional: upload base64 images to WeChat CDN when credentials are available
-    if os.environ.get("WECHAT_APPID") and os.environ.get("WECHAT_SECRET"):
+    if not args.no_upload_images and os.environ.get("WECHAT_APPID") and os.environ.get("WECHAT_SECRET"):
         output = upload_base64_images_to_wechat(output)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(output, encoding="utf-8")
+    meta = {
+        "success": True,
+        "output": str(args.output),
+        "title": data.title,
+        "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+        "digest": (data.overview.get("危害描述") or data.title)[:120],
+        "references": len(data.references),
+        "product_coverage_rows": max(0, len(data.product_coverage) - 1),
+        "reproduction_images": [str(path) for path in data.reproduction_images],
+    }
+    meta_path = args.output.with_suffix(args.output.suffix + ".meta.json")
+    meta_path.write_text(json_lib.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if args.json:
-        import json
-
-        print(
-            json.dumps(
-                {
-                    "success": True,
-                    "output": str(args.output),
-                    "title": data.title,
-                    "references": len(data.references),
-                    "product_coverage_rows": max(0, len(data.product_coverage) - 1),
-                },
-                ensure_ascii=False,
-            )
-        )
+        print(json_lib.dumps(meta | {"metadata": str(meta_path)}, ensure_ascii=False))
     else:
         print(args.output)
     return 0
