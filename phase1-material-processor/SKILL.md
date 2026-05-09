@@ -64,21 +64,21 @@ mv "/path/to/原始文件夹名" "/path/to/杭州安恒信息原创漏洞报送N
 ### 单个漏洞处理
 
 ```bash
-python3 scripts/test_material.py \
+python3 scripts/material_processor.py \
   --dir /path/to/data DAS-T105916
 ```
 
 ### 批量处理
 
 ```bash
-python3 scripts/test_material.py \
+python3 scripts/material_processor.py \
   --dir /path/to/data batch
 ```
 
 ### 列出漏洞状态
 
 ```bash
-python3 scripts/test_material.py \
+python3 scripts/material_processor.py \
   --dir /path/to/data list
 ```
 
@@ -90,7 +90,7 @@ python3 scripts/test_material.py \
 `processed-materials/杭州安恒信息原创漏洞报送N个-原始目录名`，再在副本中修改 docx：
 
 ```bash
-python3 scripts/test_material.py \
+python3 scripts/material_processor.py \
   --dir /data/work/jobs/<job_id>/input/materials/<batch_dir> \
   --output-root /data/work/jobs/<job_id>/output \
   --summary /data/work/jobs/<job_id>/output/summary.txt \
