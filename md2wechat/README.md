@@ -17,7 +17,15 @@
 
 参见官网文档安装配置。
 
-### 第二步：安装本 skill
+### 第二步：安装 md2wechat CLI
+
+本 skill 依赖 `md2wechat` 命令行工具与微信 API 通信：
+
+```bash
+brew install geekjourneyx/homebrew-md2wechat/md2wechat
+```
+
+### 第三步：安装本 skill
 
 ```bash
 claude skills install https://github.com/yaoruiquan/vulns_skills.git
@@ -25,7 +33,7 @@ claude skills install https://github.com/yaoruiquan/vulns_skills.git
 
 如果新用户没有 SSH key，优先使用 HTTPS 地址安装；需要 GitHub/GitLab SSH 或内部服务器上传权限时，先按 [上级 README 的 SSH key 说明](../README.md#没有-ssh-key-怎么办) 配置。
 
-### 第三步：配置环境变量
+### 第四步：配置环境变量
 
 ```bash
 cd ~/.claude/skills/md2wechat

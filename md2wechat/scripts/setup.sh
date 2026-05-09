@@ -20,6 +20,13 @@ fi
 chmod +x "${SKILL_ROOT}/scripts/"*.sh
 chmod +x "${SKILL_ROOT}/scripts/"*.py 2>/dev/null || true
 
+# Check md2wechat CLI dependency
+if ! command -v md2wechat &>/dev/null; then
+  echo "WARNING: 'md2wechat' CLI not found. Install it first:"
+  echo "  brew install geekjourneyx/homebrew-md2wechat/md2wechat"
+  echo ""
+fi
+
 echo "Next:"
 echo "1. Edit ${ENV_FILE}"
 echo "2. Validate config: ${SKILL_ROOT}/scripts/md2wechat-env.sh config show --format json"

@@ -1,7 +1,8 @@
 #!/bin/bash
 # CNVD 每周数据库更新脚本
-# 用法: ./cnvd_weekly_update.sh [xml文件目录]
-# 默认使用 ~/Downloads
+# 用法: ./cnvd_weekly_update.sh [xml文件目录] [文件名1 文件名2 ...]
+#   默认使用 ~/Downloads
+#   不指定文件名则处理该目录下所有 XML 文件
 
 set -e
 
@@ -20,6 +21,8 @@ CONTAINER_CNVD="/opt/cnvd/cnvd"
 
 # 参数（展开 ~ 为实际路径）
 XML_DIR="${1:-$HOME/Downloads}"
+shift 2>/dev/null || true
+FILE_NAMES=("$@")
 
 notify_dingtalk() {
     local status="$1"
@@ -51,7 +54,23 @@ echo ""
 
 # Step 1: 检查 XML 文件
 echo "[Step 1] 检查 XML 文件..."
-XML_FILES=$(ls "$XML_DIR"/2026-0*.xml 2>/dev/null || true)
+if [ ${#FILE_NAMES[@]} -gt 0 ]; then
+    # 只处理指定的文件
+    XML_FILES=""
+    for fname in "${FILE_NAMES[@]}"; do
+        fpath="$XML_DIR/$fname"
+        if [ -f "$fpath" ]; then
+            XML_FILES="$XML_FILES $fpath"
+        else
+            echo "警告: 文件不存在，跳过: $fname"
+        fi
+    done
+    XML_FILES=$(echo "$XML_FILES" | xargs)  # trim
+else
+    # 默认处理所有 XML 文件
+    XML_FILES=$(ls "$XML_DIR"/2026-0*.xml 2>/dev/null || true)
+fi
+
 if [ -z "$XML_FILES" ]; then
     echo "错误: 未找到 XML 文件 (格式: 2026-XX-XX_2026-XX-XX.xml)"
     echo "请先从 CNVD 官网下载 XML 文件到 $XML_DIR"
@@ -65,7 +84,12 @@ echo ""
 
 # Step 2: 上传到服务器
 echo "[Step 2] 上传文件到服务器 $SERVER..."
-scp "$XML_DIR"/2026-0*.xml "$SERVER_USER@$SERVER:$REMOTE_TMP/"
+# 构建 SCP 参数列表
+SCP_FILES=""
+for f in $XML_FILES; do
+    SCP_FILES="$SCP_FILES '$f'"
+done
+eval scp $SCP_FILES "$SERVER_USER@$SERVER:$REMOTE_TMP/"
 echo "上传完成"
 echo ""
 

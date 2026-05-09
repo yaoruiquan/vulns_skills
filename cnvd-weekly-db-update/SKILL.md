@@ -49,10 +49,17 @@ ssh root@10.50.10.8 "echo 'SSH OK'"
 ### Step 2: 执行一键脚本
 
 ```bash
+# 处理所有 XML 文件
 /Users/yao/.claude/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh
+
+# 指定目录 + 只处理特定文件（推荐）
+/Users/yao/.claude/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh ~/Downloads \
+  2026-04-20_2026-04-26.xml 2026-04-27_2026-05-03.xml
 ```
 
 脚本自动完成：SCP 上传 → Docker cp → parse.py 解析 → 文件归档 → 钉钉通知（如果 `.env` 已配置 `DINGTALK_WEBHOOK`）
+
+> **提示**：脚本支持在目录后附加文件名参数，只处理指定的文件。不加文件名参数则处理该目录下所有 XML 文件。
 
 ---
 

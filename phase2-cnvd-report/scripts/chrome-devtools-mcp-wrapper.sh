@@ -19,7 +19,8 @@ if [[ -f "$ENV_FILE" ]]; then
   done < "$ENV_FILE"
 fi
 
-PORT="${CHROME_DEBUG_PORT:-${CLAUDE_CHROME_MCP_PORT:-9332}}"
+HOST="${CHROME_DEVTOOLS_CNVD_HOST:-127.0.0.1}"
+PORT="${CHROME_DEVTOOLS_CNVD_PORT:-${CHROME_DEBUG_PORT:-9332}}"
 MCP_BIN="${CHROME_DEVTOOLS_MCP_BIN:-/opt/homebrew/bin/chrome-devtools-mcp}"
 
 if [[ ! -x "$MCP_BIN" ]]; then
@@ -34,7 +35,7 @@ if [[ -z "${MCP_BIN:-}" || ! -x "$MCP_BIN" ]]; then
 fi
 
 exec "$MCP_BIN" \
-  --browserUrl "http://127.0.0.1:${PORT}" \
+  --browserUrl "http://${HOST}:${PORT}" \
   --no-usage-statistics \
   --no-performance-crux \
   "$@"
