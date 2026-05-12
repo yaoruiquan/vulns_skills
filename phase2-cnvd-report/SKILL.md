@@ -60,7 +60,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 
 1. 检查 `.env`、Chrome 调试端口和 MCP 连接。
 2. 执行 `prepare_form_context.py` 生成 `form_context.json`，确认 `ready=true`。
-3. 打开 CNVD 表单页，先执行 `browser_helpers.login_guard_command`。
+3. 先打开 `https://www.cnvd.org.cn/` 通过门户验证码，登录后再导航到 `/flaw/create`，最后执行 `browser_helpers.login_guard_command`。
 4. 执行 `browser_helpers.select2_command`，等待 Select2 联动完成。
 5. 只读取 `form_context.json.page_payloads` 填写文本字段，并用 `browser_helpers.is_open_command` 设置“是否公开”为“否”。
 6. 上传 `attachment_zip_path` 指向的 CNVD 原始 zip。

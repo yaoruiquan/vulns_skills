@@ -82,7 +82,35 @@ MCP: navigate_page
   url: "https://www.cnvd.org.cn/"
 ```
 
-### 2.2 点击登录
+> **注意**：首次访问 CNVD 首页会触发 Cloudflare 验证码保护（"本站开启了验证码保护"），必须先 OCR 识别该验证码并提交，才能进入首页。
+
+### 2.2 处理门户验证码
+
+```
+MCP: take_snapshot
+# 确认页面显示"本站开启了验证码保护"
+MCP: take_screenshot
+  uid: "<验证码 img 的 uid>"
+  filePath: "/tmp/captcha_portal.png"
+```
+
+```bash
+python3 scripts/captcha_ocr.py /tmp/captcha_portal.png --preprocess cnvd
+```
+
+```
+MCP: fill
+  uid: "<验证码输入框的 uid>"
+  value: "<OCR 识别结果>"
+MCP: click
+  uid: "<提交验证码按钮的 uid>"
+MCP: wait_for
+  text: ["首页", "登录", "免费注册"]
+```
+
+验证通过后会进入 CNVD 首页。
+
+### 2.3 点击登录
 
 ```
 MCP: take_snapshot
@@ -90,11 +118,11 @@ MCP: click
   uid: "<登录链接的 uid>"
 ```
 
-### 2.3 处理登录验证码
+### 2.4 处理登录验证码
 
 参见 [captcha-ocr.md](captcha-ocr.md)。
 
-### 2.4 导航到漏洞上报表单
+### 2.5 导航到漏洞上报表单
 
 ```
 MCP: take_snapshot
@@ -106,7 +134,7 @@ MCP: click
   uid: "<立即上报漏洞的 uid>"
 ```
 
-### 2.5 登录态与 Cloudflare 检查
+### 2.6 登录态与 Cloudflare 检查
 
 进入表单后必须先执行登录态检查，不要直接开始填表。优先使用 `form_context.json.browser_helpers.login_guard_command` 生成脚本：
 

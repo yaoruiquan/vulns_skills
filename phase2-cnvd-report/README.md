@@ -47,7 +47,18 @@ claude
 ```
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口和 profile 不冲突。
-验证码识别默认使用 MCP 截图验证码图片元素到 `/tmp/captcha.png`，再执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd` 单次识别。
+
+验证码识别默认使用 MCP 截图验证码图片元素到 `/tmp/captcha.png`，再执行：
+
+```bash
+# 推荐：带人工回退（OCR 失败 2 次后自动切换人工识别）
+python3 scripts/captcha_recognize.py /tmp/captcha.png \
+  --context login \
+  --state-file /tmp/captcha_state_login.json
+
+# 或纯 OCR（不含人工回退）
+python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
+```
 
 ### 第五步：调用 skill
 

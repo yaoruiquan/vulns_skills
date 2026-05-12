@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "cnvd-chrome": {
-      "command": "/Users/yao/.claude/skills/phase2-cnvd-report/scripts/chrome-devtools-mcp-wrapper.sh",
-      "args": []
+      "command": "/bin/bash",
+      "args": [
+        "-lc",
+        "for d in \"${PHASE2_CNVD_SKILL_ROOT:-}\" /opt/opencode-skills/skills/phase2-cnvd-report /Users/yao/.claude/skills/phase2-cnvd-report; do if [ -n \"$d\" ] && [ -x \"$d/scripts/chrome-devtools-mcp-wrapper.sh\" ]; then exec \"$d/scripts/chrome-devtools-mcp-wrapper.sh\"; fi; done; echo 'phase2-cnvd-report chrome-devtools-mcp-wrapper.sh not found' >&2; exit 1"
+      ]
     }
   }
 }

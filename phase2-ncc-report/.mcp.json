@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "ncc-chrome": {
-      "command": "/Users/yao/.claude/skills/phase2-ncc-report/scripts/chrome-devtools-mcp-wrapper.sh",
-      "args": []
+      "command": "/bin/bash",
+      "args": [
+        "-lc",
+        "for d in \"${PHASE2_NCC_SKILL_ROOT:-}\" /opt/opencode-skills/skills/phase2-ncc-report /Users/yao/.claude/skills/phase2-ncc-report; do if [ -n \"$d\" ] && [ -x \"$d/scripts/chrome-devtools-mcp-wrapper.sh\" ]; then exec \"$d/scripts/chrome-devtools-mcp-wrapper.sh\"; fi; done; echo 'phase2-ncc-report chrome-devtools-mcp-wrapper.sh not found' >&2; exit 1"
+      ]
     }
   }
 }

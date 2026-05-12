@@ -16,62 +16,96 @@
 ### 脚本位置
 
 ```
-scripts/captcha_ocr.py
+scripts/captcha_recognize.py  # 推荐：带人工回退
+scripts/captcha_ocr.py         # 纯 OCR，无回退
 ```
 
 ### 使用方法
 
+**必须使用带人工回退的 captcha_recognize.py**：
+
 ```bash
-# 基本用法
-python3 scripts/captcha_ocr.py <图片路径>
+# 登录验证码
+python3 scripts/captcha_recognize.py /tmp/captcha.png \
+  --context login \
+  --max-ocr-attempts 2 \
+  --state-file /tmp/captcha_state_login.json
 
-# 示例
-python3 scripts/captcha_ocr.py /tmp/captcha.png
-# 输出：读书
+# 提交验证码
+python3 scripts/captcha_recognize.py /tmp/captcha.png \
+  --context submit \
+  --max-ocr-attempts 2 \
+  --state-file /tmp/captcha_state_submit.json
 
-# 默认流程：打开验证码图片新标签页，只截验证码图片本体，再由脚本单次识别
+# 完整流程（必须按此顺序）
 python3 scripts/browser_snippets.py captcha-tab
-python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
+python3 scripts/captcha_recognize.py /tmp/captcha.png \
+  --context login \
+  --state-file /tmp/captcha_state_login.json
 ```
+
+**禁止使用 captcha_ocr.py**（无人工回退，识别率低时会无限循环）
 
 参数说明：
 
-| 参数 | 作用 |
-|------|------|
-| `--preprocess cnvd` | 做对比度增强并至少放大 3 倍；直接验证码图通常不需要裁剪，但保留该参数更稳 |
-| `--crop-box x1,y1,x2,y2` | 旧截图排障参数；正常 CNVD 提交流程不要使用裁剪分支 |
-| `--scale 3` | OCR 前放大图片，适合验证码原图过小的情况 |
+| 参数 | 必填 | 作用 |
+|------|------|------|
+| `--context login/submit` | 是 | 验证码上下文，用于区分登录和提交验证码 |
+| `--state-file <path>` | 是 | 状态文件路径，用于跨调用计数失败次数 |
+| `--max-ocr-attempts 2` | 否 | OCR 最大尝试次数，默认 2，超过后切换到人工识别 |
+| `--preprocess cnvd` | 否 | OCR 预处理模式，默认已启用 |
 
 ## 当前识别逻辑
 
-当前脚本使用 `ddddocr`：
+### OCR + 人工回退（推荐）
 
-- 默认模式：每次执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd` 都会启动 Python 进程并加载一次 `ddddocr` 模型。
-验证码有效期较短时，优先减少浏览器切换和截图范围，不启动后台 OCR 进程。
+使用 `captcha_recognize.py`：
+
+1. **前 N 次**：使用 `ddddocr` 自动识别
+2. **第 N+1 次**：OCR 失败次数达到阈值，自动切换到人工识别
+3. **状态持久化**：通过 `--state-file` 跨调用计数失败次数
+4. **成功后重置**：登录成功后删除状态文件，重置计数
+
+### 纯 OCR（不推荐）
+
+使用 `captcha_ocr.py`：
+
+- 每次执行都会启动 Python 进程并加载一次 `ddddocr` 模型
+- 不含失败计数和人工回退机制
+- 适合测试或确定 OCR 识别率高的场景
 
 ## 自动化流程
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      验证码自动识别流程                        │
+│                  验证码识别流程（必须遵守）                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  提交前最后一步打开验证码图片新标签页                           │
+│  1. 打开验证码图片新标签页                                    │
+│     python3 scripts/browser_snippets.py captcha-tab          │
 │         ↓                                                    │
-│  python3 scripts/browser_snippets.py captcha-tab              │
+│  2. MCP 只截验证码 img 元素到 /tmp/captcha.png                │
+│     （禁止截整页/视口）                                       │
 │         ↓                                                    │
-│  MCP: 只截验证码 img 元素，不截整页/视口                       │
+│  3. 执行带人工回退的识别脚本                                  │
+│     python3 scripts/captcha_recognize.py /tmp/captcha.png \  │
+│       --context login \                                      │
+│       --state-file /tmp/captcha_state_login.json             │
 │         ↓                                                    │
-│  python3 scripts/captcha_ocr.py /tmp/captcha.png              │
-│    --preprocess cnvd                                          │
+│  4. OCR 识别（前 2 次）                                       │
+│     ├── 成功 → 返回识别结果                                   │
+│     └── 失败 → 计数 +1，刷新验证码重试                        │
 │         ↓                                                    │
-│  识别结果: "读书"                                             │
+│  5. 失败 2 次后自动切换人工识别                               │
+│     脚本输出 "MANUAL_INPUT_REQUIRED"                          │
+│     等待前端用户输入验证码                                    │
 │         ↓                                                    │
-│  同一次 evaluate_script 内完成填入验证码并点击提交              │
+│  6. 填入验证码并提交                                          │
+│     同一次 evaluate_script 完成                               │
 │         ↓                                                    │
-│  检查结果 → 成功/失败                                         │
-│         ├── 成功 → 继续                                       │
-│         └── 失败 → 重新 captcha-tab 打开新图再识别              │
+│  7. 检查结果                                                 │
+│     ├── 成功 → 删除状态文件，重置计数                         │
+│     └── 失败 → 保持计数，继续人工识别                         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
