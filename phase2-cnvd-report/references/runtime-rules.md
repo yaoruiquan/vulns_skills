@@ -19,6 +19,7 @@
 - 如果返回 Cloudflare 或登录页，先恢复会话，不要继续填表。
 - 登录验证码失败后页面可能清空密码框；每次重试前确认账号、密码、验证码都已重新填写。
 - CNVD 下拉框是 Select2 组件，必须用 `browser_helpers.select2_command` 或 `scripts/browser_snippets.py select2`。
+- `scripts/browser_snippets.py` 输出的是可直接传给 `Runtime.evaluate` / MCP `evaluate_script` 的 IIFE 表达式；必须原样执行。禁止把脚本改回 `() => {...}` 或 `async () => {...}` 函数定义，否则 CDP 只会返回函数对象 `{}`，页面逻辑不会真正执行。
 - 不要依赖 a11y 树点击 Select2 选项，也不要只改 `<select>.value`。
 - Select2 返回 `ok=false` 时先看 `results[].options`，修正字段后再继续。
 - 除导航、下拉联动确认和提交结果确认外，不要为单个字段反复 `take_snapshot`。

@@ -258,6 +258,7 @@ def build_context(args: argparse.Namespace) -> dict:
             "browser_phase_source": "浏览器阶段只读取 page_payloads 和 dropdown_phase，不重新读取 Word。",
             "login_guard_rule": "进入 /flaw/create 后必须先执行 browser_helpers.login_guard_command 生成的脚本；如检测到 Cloudflare 或登录页，先恢复登录态，不要继续填表。",
             "select2_rule": "CNVD 下拉框是 Select2 自定义组件，优先执行 browser_helpers.select2_command 生成的脚本，不要依赖 a11y 树点击选项。",
+            "runtime_evaluate_rule": "browser_helpers 输出的是可直接执行的 IIFE 表达式，必须原样传给 Runtime.evaluate/evaluate_script，不要改回 async () => {...} 函数定义。",
         },
         "browser_helpers": {
             "is_open_command": "python3 scripts/browser_snippets.py is-open",

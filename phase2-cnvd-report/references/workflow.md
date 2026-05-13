@@ -176,7 +176,7 @@ MCP: evaluate_script
     <browser_snippets.py select2 输出内容>
 ```
 
-执行结果必须满足 `ok=true`。如果返回 `ok=false`，先看 `results[].reason` 和 `results[].options`，根据页面真实选项修正 `vuln_type` / `object_type_label`，不要继续填后续字段。
+`browser_snippets.py` 输出已经是可直接执行的 IIFE 表达式，必须原样粘贴；不要把它改写成 `async () => {...}`，否则 `Runtime.evaluate` 只会返回函数对象 `{}`，Select2 实际不会执行。执行结果必须满足 `ok=true`。如果返回 `ok=false`，先看 `results[].reason` 和 `results[].options`，根据页面真实选项修正 `vuln_type` / `object_type_label`，不要继续填后续字段。
 
 完成后只 `take_snapshot` 一次确认页面已刷新到目标表单状态，然后直接按 `page_payloads.base_info`、`page_payloads.vendor_info`、`page_payloads.detail_info` 统一填写其余非 Select2 字段。除这次联动确认外，不要为单个字段反复 `take_snapshot`。
 

@@ -13,6 +13,14 @@ def js_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def as_iife(script: str) -> str:
+    """把页面脚本包装成 Runtime.evaluate 可直接执行的表达式。"""
+    code = script.strip()
+    if code.startswith("async () =>") or code.startswith("() =>") or code.startswith("function"):
+        return f"({code})()"
+    return code
+
+
 def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
     """生成 Select2 原位设值脚本。"""
     assignments = [
@@ -20,7 +28,7 @@ def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
         {"name": "漏洞类型", "selectors": ["#titlel1", "#titlel"], "label": vuln_type},
         {"name": "影响对象类型", "selectors": ["#softStyleId1", "#softStyleId"], "label": object_type},
     ]
-    return f"""async () => {{
+    return as_iife(f"""async () => {{
   const assignments = {json.dumps(assignments, ensure_ascii=False)};
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const aliases = {{
@@ -44,13 +52,21 @@ def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
     if (descriptor && descriptor.set) descriptor.set.call(el, value);
     else el.value = value;
   }};
+  const fire = (el, type, detail = undefined) => {{
+    const event = detail === undefined
+      ? new Event(type, {{ bubbles: true }})
+      : new CustomEvent(type, {{ bubbles: true, detail }});
+    el.dispatchEvent(event);
+  }};
   const resolveOption = (el, label) => {{
     const options = Array.from(el.options || []);
     const target = options.find((option) =>
       option.value === label ||
       option.value === aliases[label] ||
       option.text.trim() === label ||
-      normalize(option.text) === normalize(label)
+      normalize(option.text) === normalize(label) ||
+      normalize(option.text).includes(normalize(label)) ||
+      normalize(label).includes(normalize(option.text))
     );
     return {{ options, target }};
   }};
@@ -80,18 +96,26 @@ def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
       }};
     }}
     setNativeValue(el, target.value);
-    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    fire(el, 'input');
+    fire(el, 'change');
     if (window.jQuery) {{
       const $el = window.jQuery(el);
-      $el.val(target.value).trigger('change');
-      if ($el.data('select2')) $el.trigger('select2:select');
+      $el.val(target.value).trigger('input').trigger('change');
+      if ($el.data('select2')) {{
+        $el.trigger({{
+          type: 'select2:select',
+          params: {{ data: {{ id: target.value, text: target.text.trim(), element: target }} }}
+        }});
+      }}
     }}
+    fire(el, 'blur');
     return {{
       ok: true,
       selector: selectors.find((selector) => document.querySelector(selector)),
       value: el.value,
-      text: target.text.trim()
+      expectedValue: target.value,
+      text: target.text.trim(),
+      selectedText: el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0].text.trim() : ''
     }};
   }};
   const results = [];
@@ -104,12 +128,12 @@ def select2_script(form_type: str, vuln_type: str, object_type: str) -> str:
     ok: results.every((item) => item.ok),
     results
   }};
-}}"""
+}}""")
 
 
 def captcha_tab_script() -> str:
     """生成把当前验证码图片 URL 直接打开到新标签页的脚本。"""
-    return """() => {
+    return as_iife("""() => {
   const image = document.querySelector('#codeSpan1 img') || document.querySelector('#codeSpan1');
   if (!image) return { ok: false, reason: '未找到 #codeSpan1 img 或 #codeSpan1' };
   if (image.tagName !== 'IMG') return { ok: false, reason: '#codeSpan1 不是 IMG 元素', tag: image.tagName };
@@ -123,7 +147,7 @@ def captcha_tab_script() -> str:
   const win = window.open(src, '_blank');
   if (!win) return { ok: false, reason: '新窗口被浏览器拦截', src };
   return { ok: true, src, openedNewTab: true, currentTab: location.href };
-}"""
+}""")
 
 
 def captcha_preview_script() -> str:
@@ -133,7 +157,7 @@ def captcha_preview_script() -> str:
 
 def login_guard_script() -> str:
     """生成登录态/拦截页检查脚本。"""
-    return """() => {
+    return as_iife("""() => {
   const text = document.body ? document.body.innerText : '';
   const href = location.href;
   const hasCreateForm = Boolean(document.querySelector('#isEvent1, #title1, #flawAttFile, #subForm'));
@@ -142,7 +166,7 @@ def login_guard_script() -> str:
   const hasPasswordInput = Boolean(document.querySelector('input[type="password"], input[name*="password"], input[id*="password"], #password'));
   const isLoginPage = !hasCreateForm && (/login|user\\/login/i.test(href) || hasPasswordInput || /用户登录|会员登录|登录名|密码/.test(text));
   return { ok: !hasCloudflare && !isLoginPage && hasCreateForm, hasCloudflare, isLoginPage, hasCreateForm, href };
-}"""
+}""")
 
 
 def is_open_no_script() -> str:
@@ -152,7 +176,7 @@ def is_open_no_script() -> str:
     .find() 只找到第一组隐藏的，不会改 UI。本脚本遍历全部 4 个，
     确保所有 value=1(是) 都 unchecked、所有 value=0(否) 都 checked。
     """
-    return """() => {
+    return as_iife("""() => {
   const radios = document.querySelectorAll('input[name="isOpen"]');
   const yes = []; const no = [];
   radios.forEach((r) => { (r.value === '0' ? no : yes).push(r); });
@@ -165,12 +189,12 @@ def is_open_no_script() -> str:
   const allYesUnchecked = yes.every((r) => !r.checked);
   const allNoChecked = no.every((r) => r.checked);
   return { ok: allYesUnchecked && allNoChecked, yesCount: yes.length, noCount: no.length };
-}"""
+}""")
 
 
 def submit_captcha_script(code: str) -> str:
     """生成填验证码并立即提交脚本。"""
-    return f"""() => {{
+    return as_iife(f"""() => {{
   const code = {js_string(code)};
   const input = document.querySelector('#myCode1');
   if (!input) return {{ ok: false, reason: '未找到验证码输入框 #myCode1' }};
@@ -181,7 +205,7 @@ def submit_captcha_script(code: str) -> str:
   if (!submit) return {{ ok: false, reason: '未找到提交按钮 #subForm' }};
   submit.click();
   return {{ ok: true, code }};
-}}"""
+}}""")
 
 
 def parse_args() -> argparse.Namespace:
