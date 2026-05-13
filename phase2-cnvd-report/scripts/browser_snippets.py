@@ -137,6 +137,19 @@ def captcha_tab_script() -> str:
   const image = document.querySelector('#codeSpan1 img') || document.querySelector('#codeSpan1');
   if (!image) return { ok: false, reason: '未找到 #codeSpan1 img 或 #codeSpan1' };
   if (image.tagName !== 'IMG') return { ok: false, reason: '#codeSpan1 不是 IMG 元素', tag: image.tagName };
+  const rect = image.getBoundingClientRect();
+  if (!image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) {
+    return {
+      ok: false,
+      code: 'CNVD_CAPTCHA_IMAGE_BROKEN',
+      reason: '提交验证码图片未加载成功，通常是 /common/myCodeNew 触发了 CNVD 防火墙验证码；不要 OCR 页面占位文字。',
+      src: image.currentSrc || image.src || image.getAttribute('src') || '',
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      next: '保存当前页面或 /common/myCodeNew 防火墙页截图到 logs/human-cnvd-firewall.png，并等待前端人工输入防火墙验证码。'
+    };
+  }
   const rawSrc = image.currentSrc || image.src || image.getAttribute('src');
   if (!rawSrc) return { ok: false, reason: '验证码图片没有 src' };
   const src = new URL(rawSrc, location.href).href;
@@ -196,6 +209,15 @@ def submit_captcha_script(code: str) -> str:
     """生成填验证码并立即提交脚本。"""
     return as_iife(f"""() => {{
   const code = {js_string(code)};
+  const invalidWords = ['看不清', '点击更换', '存在', '二进制', '验证码'];
+  if (!code || invalidWords.some((word) => String(code).includes(word))) {{
+    return {{
+      ok: false,
+      code: 'INVALID_OCR_TEXT',
+      reason: 'OCR 结果像页面提示文字，不像验证码；禁止提交，需重新获取真实验证码图片或进入防火墙人工处理。',
+      value: code
+    }};
+  }}
   const input = document.querySelector('#myCode1');
   if (!input) return {{ ok: false, reason: '未找到验证码输入框 #myCode1' }};
   input.value = code;

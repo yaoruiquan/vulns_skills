@@ -39,10 +39,12 @@
 - 提交验证码必须是提交前最后一步。
 - 提交前不要点击刷新验证码。
 - 默认执行 `browser_helpers.open_captcha_tab_command`，把当前 `/common/myCodeNew?t=...` 打开到新标签页；不要覆盖原表单页。
+- 如果 `open_captcha_tab_command` 返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时禁止 OCR 页面占位文字，必须保存防火墙截图到 `logs/human-cnvd-firewall.png`，写入 `progress.jsonl` 的 warning，并等待前端人工输入防火墙验证码。
 - 识别命令默认加 `--preprocess cnvd`。
 - 切到验证码图片标签页后，只截验证码图片元素本体到 `/tmp/captcha.png`，再通过 `ocr.recognize_command` 单次本地识别。
 - 禁止截整个视口或整页；CNVD 验证码原图很小，整页截图会导致 ddddocr 识别为空。
 - OCR 结果返回后，用 `browser_helpers.submit_captcha_command_template` 生成脚本，立即填入并提交。
+- 如果提交脚本返回 `INVALID_OCR_TEXT`，说明 OCR 结果是“看不清/点击更换/存在/二进制/验证码”等页面文字，不是真实验证码；不要提交，重新获取真实验证码图片或进入防火墙人工处理。
 - 验证码失败时重新执行 `captcha-tab` 打开新图，不复用旧标签页和旧结果。
 
 ## 批量上报

@@ -274,7 +274,7 @@ def build_context(args: argparse.Namespace) -> dict:
         },
         "ocr": {
             "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd",
-            "submit_rule": "提交前不要点击刷新；固定执行 browser_helpers.open_captcha_tab_command 打开当前验证码图片新标签页，只用 MCP 对验证码 img 元素截图到 /tmp/captcha.png，再执行 recognize_command 单次本地识别；识别结果返回后用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交。禁止整页/视口截图，禁止默认改用后台 OCR 进程。",
+            "submit_rule": "提交前不要点击刷新；固定执行 browser_helpers.open_captcha_tab_command。若返回 ok=true，打开的是已加载的真实验证码图片，再只用 MCP 对验证码 img 元素截图到 /tmp/captcha.png 并执行 recognize_command 单次本地识别；识别结果返回后用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交。若返回 code=CNVD_CAPTCHA_IMAGE_BROKEN，说明 /common/myCodeNew 触发 CNVD 防火墙或图片加载失败，禁止 OCR 页面占位文字，必须保存防火墙截图到 logs/human-cnvd-firewall.png，写 progress warning 并等待前端人工验证码后继续。禁止整页/视口截图用于普通提交验证码，禁止提交包含“看不清/点击更换/存在/二进制/验证码”等页面文字的 OCR 结果。",
         },
         "submission_zip_path": data.get("attachment_zip_path", ""),
         "submission_zip_status": attachment_status,

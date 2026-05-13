@@ -376,6 +376,8 @@ https://www.cnvd.org.cn/common/myCodeNew?t=0.8846792108682565
 
 如果返回 `reason=验证码地址不是 /common/myCodeNew`，停止识别，先检查页面选择器，避免打开错误图片。
 
+如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时不要截图表单页占位文字，不要把“看不清/点击更换/存在/二进制”当验证码提交；应保存防火墙页或当前页截图到 `logs/human-cnvd-firewall.png`，写入 `progress.jsonl` 的 warning，并等待前端人工输入防火墙验证码后继续。
+
 3. 切到新标签页。新标签页只显示验证码图片，必须只对验证码图片元素截图到 `/tmp/captcha.png`，不要截整个视口，然后识别：
 
 ```bash

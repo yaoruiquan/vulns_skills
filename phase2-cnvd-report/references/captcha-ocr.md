@@ -121,17 +121,20 @@ python3 scripts/captcha_recognize.py /tmp/captcha.png \
 ## 注意事项
 
 1. **直接开图识别**：提交前不要点击刷新；执行 `python3 scripts/browser_snippets.py captcha-tab`，把当前 `#codeSpan1 img.src` 指向的 `/common/myCodeNew?t=...` 打开到新标签页。
+   - 如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有成功加载，通常是该图片请求被 CNVD 防火墙验证码拦截。此时不要 OCR 当前页面的“看不清/点击更换”占位文字，必须保存防火墙截图并等待前端人工输入。
 2. **只截图片元素**：新标签页只截验证码 `<img>` 元素本体到 `/tmp/captcha.png`，不要截整个视口。
 3. **禁止整页截图**：验证码原图通常只有约 `80x35` 像素，整页截图会把图片缩在大画布里，ddddocr 容易返回空字符串。
 4. **单次脚本识别**：默认执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd`，不启动或复用后台 OCR 进程。
 5. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
 6. **地址校验**：`captcha-tab` 会校验验证码 URL 的 path 必须是 `/common/myCodeNew`，避免误打开页面上的其他图片
 7. **失败重试**：如果页面提示验证码错误，重新执行 `captcha-tab` 打开新的验证码图片标签页并识别，不复用旧标签页和旧结果
+8. **错误 OCR 防护**：如果 OCR 结果包含“看不清”“点击更换”“存在”“二进制”“验证码”等页面文字，说明截图范围或图片加载状态错误，禁止提交。
 ## 最快稳定路径
 
 最快路径不是反复截图页面或刷新验证码，而是固定为：
 
 1. 原表单页执行 `captcha-tab`，读取当前 `#codeSpan1 img.src` 并新开验证码图片标签页。
+   - 返回 `CNVD_CAPTCHA_IMAGE_BROKEN` 时，切换到 CNVD 防火墙人工验证码流程。
 2. MCP 只截验证码图片元素到 `/tmp/captcha.png`，不要截整个视口。
 3. OCR 使用单次脚本识别，不依赖端口和后台进程。
 4. 识别完成立即用一次 `submit-captcha` 脚本完成填入和提交。
