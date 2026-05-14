@@ -19,6 +19,7 @@ from typing import Iterable
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = SKILL_ROOT / "assets" / "wechat-alert-article-template.placeholders.html"
+DEFAULT_MICROSOFT_TEMPLATE = SKILL_ROOT / "assets" / "wechat-microsoft-monthly-template.placeholders.html"
 DEFAULT_HEADER_IMAGE = SKILL_ROOT / "assets" / "logo.png"
 
 FORBIDDEN_OUTPUT = ("<style", "<script", "class=", "contenteditable=", "ProseMirror", "onclick=")
@@ -54,6 +55,34 @@ class AlertData:
     references: list[str] = field(default_factory=list)
     overview: dict[str, str] = field(default_factory=dict)
     product_coverage: list[list[str]] = field(default_factory=list)
+
+
+@dataclass
+class MicrosoftVulnerability:
+    title: str = ""
+    description: str = ""
+    vuln_type: str = ""
+    cve_id: str = ""
+    cnvd_id: str = ""
+    cnnvd_id: str = ""
+    antian_cert_id: str = ""
+    cvss_score: str = ""
+    severity: str = ""
+    cvss_vector: dict[str, str] = field(default_factory=dict)
+    reference: str = ""
+
+
+@dataclass
+class MicrosoftMonthlyReport:
+    title: str = ""
+    notice: list[str] = field(default_factory=list)
+    product_intro: list[str] = field(default_factory=list)
+    zero_day_note: str = ""
+    highlighted_vulns: list[str] = field(default_factory=list)
+    critical_vulns: list[str] = field(default_factory=list)
+    vulnerabilities: list[MicrosoftVulnerability] = field(default_factory=list)
+    official_fix: list[str] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
 
 
 class TableParser(HTMLParser):
@@ -127,6 +156,12 @@ def extract_tables_lenient(markdown: str) -> list[list[list[str]]]:
             cells = []
             for cell_html in re.findall(r"<t[dh]\b[^>]*>(.*?)(?=<t[dh]\b|</tr>|$)", row_html, flags=re.I | re.S):
                 text = re.sub(r"<br\s*/?>", " ", cell_html, flags=re.I)
+                text = re.sub(r"<[^>]+>", "", text)
+                value = normalize_space(text)
+                if value:
+                    cells.append(value)
+            if not cells:
+                text = re.sub(r"<br\s*/?>", " ", row_html, flags=re.I)
                 text = re.sub(r"<[^>]+>", "", text)
                 value = normalize_space(text)
                 if value:
@@ -508,6 +543,113 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     if coverage_body and len(tables) >= 2:
         data.product_coverage = tables[-1]
 
+    return data
+
+
+def is_microsoft_monthly_report(markdown: str, source: Path) -> bool:
+    markers = ("微软", "漏洞速览表", "漏洞详情")
+    if all(marker in markdown for marker in markers):
+        return True
+    return "微软漏洞通报" in str(source) or "微软" in source.stem
+
+
+def table_items(table: list[list[str]]) -> list[str]:
+    items: list[str] = []
+    for row in table:
+        text = strip_markdown(" ".join(cell for cell in row if cell))
+        if text and text not in items:
+            items.append(text)
+    return items
+
+
+def clean_vuln_type(value: str) -> str:
+    return re.sub(r"^\s*\d+[.、]\s*", "", value).strip()
+
+
+def clean_notice_text(value: str) -> str:
+    value = strip_markdown(value)
+    value = re.sub(r"\s*>\s*", " ", value)
+    value = normalize_space(value)
+    value = re.sub(r"^安全通告\s*", "", value)
+    return value.strip()
+
+
+def parse_microsoft_vulnerability(table: list[list[str]]) -> MicrosoftVulnerability | None:
+    values = table_to_key_values(table)
+    title = values.get("漏洞标题") or values.get("漏洞名称") or ""
+    if not title:
+        return None
+
+    vector_keys = (
+        "访问途径（AV）",
+        "攻击复杂度（AC）",
+        "所需权限（PR）",
+        "用户交互（UI）",
+        "影响范围（S）",
+        "机密性影响（C）",
+        "完整性影响（I）",
+        "可用性影响（A）",
+    )
+    reference = ""
+    for row in table:
+        for item in row:
+            match = re.search(r"https?://[^\s<>\])\"']+", item)
+            if match:
+                reference = match.group(0).rstrip("。；;，,")
+                break
+        if reference:
+            break
+
+    return MicrosoftVulnerability(
+        title=title,
+        description=values.get("漏洞描述", ""),
+        vuln_type=clean_vuln_type(values.get("漏洞类型", "")),
+        cve_id=values.get("CVE编号", ""),
+        cnvd_id=values.get("CNVD编号", ""),
+        cnnvd_id=values.get("CNNVD编号", ""),
+        antian_cert_id=values.get("安恒CERT编号", ""),
+        cvss_score=values.get("CVSS3.1评分", ""),
+        severity=values.get("危害等级", "") or values.get("漏洞危害等级", ""),
+        cvss_vector={key: values[key] for key in vector_keys if values.get(key)},
+        reference=reference,
+    )
+
+
+def parse_microsoft_report(markdown: str, source: Path) -> MicrosoftMonthlyReport:
+    tables = extract_tables(markdown)
+    sections = split_sections(markdown)
+    data = MicrosoftMonthlyReport(title=extract_title(markdown, {}, source))
+
+    preface_items = [clean_notice_text(item) for item in plain_paragraphs(sections.get("__preface__", ""))]
+    preface_items = [item for item in preface_items if item and item != "安全通告"]
+    data.notice = preface_items
+
+    vuln_info = find_section(sections, "漏洞信息")
+    intro_part = vuln_info.split("**漏洞速览表**", 1)[0]
+    data.product_intro = plain_paragraphs(intro_part)
+
+    zero_day = re.search(r"(?:^|\n)\s*1[.、]?\s*(本月.*?0day.*?漏洞。?)", vuln_info, flags=re.I | re.S)
+    if zero_day:
+        data.zero_day_note = normalize_space(zero_day.group(1))
+
+    summary_tables = [table for table in tables if table and all(len(row) == 1 for row in table)]
+    if summary_tables:
+        data.highlighted_vulns = table_items(summary_tables[0])
+    if len(summary_tables) >= 2:
+        data.critical_vulns = table_items(summary_tables[1])
+
+    for table in tables:
+        vuln = parse_microsoft_vulnerability(table)
+        if vuln:
+            data.vulnerabilities.append(vuln)
+
+    fix_body = find_section(sections, "修复方案") or find_section(sections, "修复建议")
+    data.official_fix, _ = split_fix_section(fix_body)
+    if not data.official_fix:
+        data.official_fix = clean_blocks(markdown_blocks(fix_body))
+
+    ref_body = find_section(sections, "参考资料")
+    data.references = extract_references(ref_body) or extract_references(markdown)
     return data
 
 
@@ -951,6 +1093,137 @@ def render_vuln_info(data: AlertData) -> str:
     return section_title("漏洞信息") + "\n" + "\n".join(parts)
 
 
+def link_html(url: str) -> str:
+    safe_url = escape(url)
+    return f'<a href="{safe_url}" style="color:#4577da;text-decoration:none;word-break:break-all;">{safe_url}</a>'
+
+
+def raw_cell(content: str, *, header: bool = False, colspan: int = 1) -> str:
+    attrs = f' colspan="{colspan}"' if colspan > 1 else ""
+    if header:
+        style = "word-break:break-all;border:1px solid #4577da;background-color:#4577da;padding:5px;color:#ffffff;font-size:14px;text-align:center;"
+        return f'<td{attrs} style="{style}"><strong>{content}</strong></td>'
+    style = "word-break:break-all;border:1px solid #4577da;padding:5px;font-size:14px;color:#3e3e3e;"
+    return f'<td{attrs} style="{style}">{content}</td>'
+
+
+def severity_color(severity: str) -> str:
+    if any(word in severity for word in ("严重", "危急", "超危")):
+        return "#b42318"
+    if "高危" in severity:
+        return "#d93026"
+    if "中危" in severity:
+        return "#f29900"
+    if "低危" in severity:
+        return "#2e7d32"
+    return "#3e3e3e"
+
+
+def render_microsoft_notice(data: MicrosoftMonthlyReport) -> str:
+    parts = [section_title("安全通告")]
+    parts.extend(paragraph(item) for item in data.notice)
+    parts.extend(paragraph(item) for item in data.product_intro)
+    return "\n".join(part for part in parts if part)
+
+
+def render_microsoft_list_table(title: str, items: list[str]) -> str:
+    if not items:
+        return ""
+    rows = [f"<tr>{cell(title, header=True, colspan=2)}</tr>"]
+    for index, item in enumerate(items, start=1):
+        rows.append(f"<tr>{label_cell(str(index))}{cell(item)}</tr>")
+    return (
+        '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;min-height:40px;">'
+        '<table style="min-width:100px;width:100%;border-collapse:collapse;table-layout:fixed;"><tbody>'
+        + "\n".join(rows)
+        + "</tbody></table></section>"
+    )
+
+
+def render_microsoft_summary(data: MicrosoftMonthlyReport) -> str:
+    parts = [section_title("漏洞速览")]
+    if data.zero_day_note:
+        parts.append(
+            '<section style="margin:14px 0;padding:12px 14px;border-left:5px solid #f8c025;'
+            'background:#fff8df;border-radius:4px;">'
+            f'<p style="margin:0;color:#3e3e3e;font-size:15px;line-height:1.9;text-align:justify;">{escape(data.zero_day_note)}</p>'
+            '</section>'
+        )
+    parts.append(render_microsoft_list_table("重点关注漏洞", data.highlighted_vulns))
+    parts.append(render_microsoft_list_table("严重漏洞", data.critical_vulns))
+    return "\n".join(part for part in parts if part)
+
+
+def render_microsoft_vulnerability(index: int, vuln: MicrosoftVulnerability) -> str:
+    rows = [f"<tr>{cell('漏洞详情', header=True, colspan=4)}</tr>"]
+    rows.append(f"<tr>{label_cell('漏洞标题')}{cell(vuln.title, colspan=3)}</tr>")
+    if vuln.description:
+        rows.append(f"<tr>{label_cell('漏洞描述')}{cell(vuln.description, colspan=3)}</tr>")
+    severity_text = escape(vuln.severity or "待确认")
+    severity_html = f'<span style="color:{severity_color(vuln.severity)};font-weight:700;">{severity_text}</span>'
+    rows.append(
+        f"<tr>{label_cell('漏洞类型')}{cell(vuln.vuln_type or '待确认')}"
+        f"{label_cell('危害等级')}{raw_cell(severity_html)}</tr>"
+    )
+    rows.append(
+        f"<tr>{label_cell('CVE编号')}{cell(vuln.cve_id or '未分配')}"
+        f"{label_cell('CVSS3.1评分')}{cell(vuln.cvss_score or '待确认')}</tr>"
+    )
+    rows.append(
+        f"<tr>{label_cell('CNVD编号')}{cell(vuln.cnvd_id or '未分配')}"
+        f"{label_cell('CNNVD编号')}{cell(vuln.cnnvd_id or '未分配')}</tr>"
+    )
+    if vuln.antian_cert_id:
+        rows.append(f"<tr>{label_cell('安恒CERT编号')}{cell(vuln.antian_cert_id, colspan=3)}</tr>")
+    if vuln.cvss_vector:
+        vector = "；".join(f"{key}：{value}" for key, value in vuln.cvss_vector.items())
+        rows.append(f"<tr>{label_cell('CVSS向量')}{cell(vector, colspan=3)}</tr>")
+    if vuln.reference:
+        rows.append(f"<tr>{label_cell('参考链接')}{raw_cell(link_html(vuln.reference), colspan=3)}</tr>")
+
+    return (
+        vuln_sub_title(f"{index}.{vuln.title}")
+        + "\n"
+        + '<section style="-webkit-tap-highlight-color:transparent;margin:10px 0px;min-height:40px;">'
+        + '<table style="min-width:100px;width:100%;border-collapse:collapse;table-layout:fixed;"><tbody>'
+        + "\n".join(rows)
+        + "</tbody></table></section>"
+    )
+
+
+def render_microsoft_details(vulnerabilities: list[MicrosoftVulnerability]) -> str:
+    if not vulnerabilities:
+        return ""
+    parts = [section_title("漏洞详情")]
+    for index, vuln in enumerate(vulnerabilities, start=1):
+        parts.append(render_microsoft_vulnerability(index, vuln))
+    return "\n".join(parts)
+
+
+def render_microsoft_fix(blocks: list[str]) -> str:
+    if not blocks:
+        return ""
+    return section_title("修复方案") + "\n" + blocks_html(blocks)
+
+
+def render_microsoft_report(data: MicrosoftMonthlyReport, template: Path) -> str:
+    html_template = template.read_text(encoding="utf-8")
+    values = {
+        "header_html": render_header(AlertData(title=data.title)),
+        "notice_section": render_microsoft_notice(data),
+        "summary_section": render_microsoft_summary(data),
+        "vulnerability_details_section": render_microsoft_details(data.vulnerabilities),
+        "fix_section": render_microsoft_fix(data.official_fix),
+        "references_section": render_references(data.references),
+        "technical_support_section": render_support(),
+    }
+    output = html_template
+    for key, value in values.items():
+        output = output.replace("{{" + key + "}}", value)
+    validate_html(output)
+    return output
+
+
 def upload_base64_images_to_wechat(html_content: str) -> str:
     """Upload base64 images in HTML to WeChat article image CDN."""
     appid = os.environ.get("WECHAT_APPID", "")
@@ -1017,19 +1290,60 @@ def render(data: AlertData, template: Path) -> str:
     return output
 
 
+def digest_from_report(data: MicrosoftMonthlyReport) -> str:
+    source = data.notice or data.product_intro or [data.title]
+    return strip_markdown(source[0])[:120] if source else data.title[:120]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render WeChat alert article HTML from Markdown")
     parser.add_argument("markdown_file", type=Path)
     parser.add_argument("-o", "--output", type=Path, required=True)
-    parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
+    parser.add_argument("--template", type=Path, default=None)
+    parser.add_argument("--article-type", choices=("auto", "alert", "microsoft-monthly"), default="auto")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
     parser.add_argument("--no-upload-images", action="store_true", help="Keep local images as data URIs")
     args = parser.parse_args()
 
     load_local_env()
     markdown = args.markdown_file.read_text(encoding="utf-8")
-    data = parse_alert(markdown, args.markdown_file)
-    output = render(data, args.template)
+    article_type = args.article_type
+    if article_type == "auto":
+        article_type = "microsoft-monthly" if is_microsoft_monthly_report(markdown, args.markdown_file) else "alert"
+
+    if article_type == "microsoft-monthly":
+        data = parse_microsoft_report(markdown, args.markdown_file)
+        template = args.template or DEFAULT_MICROSOFT_TEMPLATE
+        output = render_microsoft_report(data, template)
+        digest = digest_from_report(data)
+        meta = {
+            "success": True,
+            "output": str(args.output),
+            "title": data.title,
+            "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+            "digest": digest,
+            "article_type": article_type,
+            "references": len(data.references),
+            "highlighted_vulnerabilities": len(data.highlighted_vulns),
+            "critical_vulnerabilities": len(data.critical_vulns),
+            "vulnerability_details": len(data.vulnerabilities),
+            "reproduction_images": [],
+        }
+    else:
+        data = parse_alert(markdown, args.markdown_file)
+        template = args.template or DEFAULT_TEMPLATE
+        output = render(data, template)
+        meta = {
+            "success": True,
+            "output": str(args.output),
+            "title": data.title,
+            "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+            "digest": (data.overview.get("危害描述") or data.title)[:120],
+            "article_type": article_type,
+            "references": len(data.references),
+            "product_coverage_rows": max(0, len(data.product_coverage) - 1),
+            "reproduction_images": [str(path) for path in data.reproduction_images],
+        }
 
     # Optional: upload base64 images to WeChat CDN when credentials are available
     if not args.no_upload_images and os.environ.get("WECHAT_APPID") and os.environ.get("WECHAT_SECRET"):
@@ -1037,16 +1351,6 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(output, encoding="utf-8")
-    meta = {
-        "success": True,
-        "output": str(args.output),
-        "title": data.title,
-        "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
-        "digest": (data.overview.get("危害描述") or data.title)[:120],
-        "references": len(data.references),
-        "product_coverage_rows": max(0, len(data.product_coverage) - 1),
-        "reproduction_images": [str(path) for path in data.reproduction_images],
-    }
     meta_path = args.output.with_suffix(args.output.suffix + ".meta.json")
     meta_path.write_text(json_lib.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 

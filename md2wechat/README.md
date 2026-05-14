@@ -6,6 +6,7 @@
 
 - 从漏洞预警 Markdown 提取元数据（标题、CVE、风险等级、PoC/Exp/在野/研究状态）
 - 通过 `scripts/render_wechat_article.py` 渲染对齐真实公众号模板的内联 HTML
+- 支持两种正文模板：普通漏洞预警模板、微软每月安全更新通报模板
 - 在 HTML 旁生成 `<html>.meta.json`，供草稿标题、作者和摘要使用
 - 通过 `scripts/render_alert_cover.py` 基于 PPTX 模版生成带标题和状态标签的封面图
 - 校验 HTML 合规性（禁止 `<style>`、`<script>`、`class=`、`contenteditable=` 等）
@@ -49,7 +50,8 @@ cp .env.example .env
 | `scripts/render_wechat_article.py` | 确定性 HTML 渲染脚本 |
 | `scripts/create_alert_draft.py` | 使用 HTML 旁路元数据创建带真实标题的微信公众号草稿 |
 | `scripts/render_alert_cover.py` | PPTX 封面渲染脚本 |
-| `assets/wechat-alert-article-template.placeholders.html` | 公众号正文 HTML 占位符模板 |
+| `assets/wechat-alert-article-template.placeholders.html` | 普通漏洞预警正文 HTML 占位符模板 |
+| `assets/wechat-microsoft-monthly-template.placeholders.html` | 微软月度安全更新通报正文 HTML 占位符模板 |
 | `assets/wechat-alert-article-template.html` | 公众号正文样式源文件（仅视觉参考，不直接上传） |
 | `assets/wechat-alert-cover-template.pptx` | 封面 PPTX 源模版 |
 | `references/antian-security-theme.md` | 安恒公众号 HTML 样式规范 |
@@ -60,6 +62,9 @@ cp .env.example .env
 ```bash
 # 生成公众号正文 HTML
 python3 scripts/render_wechat_article.py article.md --output /tmp/article.html --json
+
+# 强制使用微软月度通报模板（默认 auto 会自动识别）
+python3 scripts/render_wechat_article.py microsoft-monthly.md --article-type microsoft-monthly --output /tmp/microsoft-monthly.html --json
 
 # 生成封面
 python3 scripts/render_alert_cover.py article.md --output /tmp/cover.png --poc true --exp false --wild false --research true
