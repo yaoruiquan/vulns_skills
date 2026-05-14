@@ -23,6 +23,29 @@
 - `漏洞描述或简介` 最多 255 字，只填 `description`，不要改用 `description_full`。
 - 第 3 页只填 `page_payloads.page3_text.verification`，不要直接粘贴 `verification_source` 或 Word 原文。
 - 第 3 页必须上传 `verification_video_path` 和 `poc_file_path`；路径为空或不存在时先回到数据准备阶段修复。
+- 第 3 页附件上传不要优先使用 MCP `upload_file`。CNNVD 页面是 Vue/Element UI 自定义上传组件，隐藏 input 可能出现“工具返回成功但组件 fileList 为空”。默认使用 `scripts/upload_cnnvd_attachments.py` 先调用 CNNVD 上传接口，再把返回的 server file URL 回填到页面组件。
+
+## 附件上传确定性流程
+
+1. 在浏览器页通过 `chrome-devtools-cnnvd_evaluate_script` 读取登录 token，示例只返回 token 给当前执行上下文，不写入日志：
+
+   ```javascript
+   () => localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+   ```
+
+2. 把 token 写入临时文件或通过 stdin 传给脚本，禁止把 token 写进 `output/`、`summary.txt`、Git 或最终回复。
+3. 上传附件：
+
+   ```bash
+   python3 /root/.agents/skills/phase2-cnnvd-report/scripts/upload_cnnvd_attachments.py \
+     --form-context /data/work/jobs/{job_id}/output/form_context.json \
+     --token-stdin \
+     --output /data/work/jobs/{job_id}/logs/cnnvd-uploaded-attachments.json \
+     --apply-js /data/work/jobs/{job_id}/logs/cnnvd-apply-upload-state.js
+   ```
+
+4. 用 `chrome-devtools-cnnvd_evaluate_script` 执行 `logs/cnnvd-apply-upload-state.js` 中的函数，确认返回 `success=true` 且 video、poc 两项均成功。
+5. 只有在脚本上传接口失败时，才退回手工 DOM 调试；不要启动长期 HTTP server，也不要依赖 `host.docker.internal` 或 job 容器 IP 给 CNNVD 页面 fetch 本地文件。
 
 ## 验证过程
 

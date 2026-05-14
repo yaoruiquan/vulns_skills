@@ -98,6 +98,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 - `scripts/prepare_form_context.py`：生成浏览器阶段唯一数据源。
 - `scripts/batch_report.py`：批量状态推进、记录编号、最终统一通知。
 - `scripts/captcha_ocr.py`：验证码 OCR，读取截图文件并单次识别。
+- `scripts/upload_cnnvd_attachments.py`：通过 CNNVD 上传接口上传第 3 页视频和 PoC，并生成回填 Vue 上传组件状态的浏览器脚本。
 - `scripts/publish_submission_zip.py`：上传单个 CNNVD 原始 zip。
 - `scripts/update_summary.py`：更新漏洞汇总表。
 - `scripts/start-chrome-debug.sh`：启动本 skill 专用 Chrome。
