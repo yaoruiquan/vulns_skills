@@ -40,26 +40,40 @@ ssh root@10.50.10.8 "echo 'SSH OK'"
 
 **检查成功**：继续执行脚本
 
-### Step 1: 下载 XML 文件
+### Step 1: 确认 XML 输入
 
-手动从 CNVD 官网下载 XML 到 `~/Downloads`：
-- 官网 → 统计查询 → 共享数据下载
+前端或调用方必须先把 CNVD 周库 XML 上传到当前 job 的输入目录：
+
+```text
+/data/work/jobs/{job_id}/input/xml/*.xml
+```
+
+本 skill 只处理 `input/xml/` 下的 `.xml` 文件，不读取 `~/Downloads`、桌面或任何本机绝对路径。
+
+- 来源：CNVD 官网 → 统计查询 → 共享数据下载
 - 文件格式：`2026-XX-XX_2026-XX-XX.xml`
 
 ### Step 2: 执行一键脚本
 
+执行模式来自 `input/service-config.json`：
+
+- `mode=check`：只检查 `input/xml/*.xml` 和远端 SSH/Docker 容器，不上传、不入库。
+- `mode=update` 且 `serviceConfig.dry_run=false`：执行 SCP 上传、Docker cp、parse.py 入库和归档。
+- `serviceConfig.dry_run=true`：即使 mode 是 update，也只做检查，不执行写入。
+
 ```bash
-# 处理所有 XML 文件
-/Users/yao/.claude/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh
+# 在当前 job 根目录执行，默认处理 input/xml/*.xml
+/root/.agents/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh
 
 # 指定目录 + 只处理特定文件（推荐）
-/Users/yao/.claude/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh ~/Downloads \
+/root/.agents/skills/cnvd-weekly-db-update/scripts/cnvd_weekly_update.sh input/xml \
   2026-04-20_2026-04-26.xml 2026-04-27_2026-05-03.xml
 ```
 
 脚本自动完成：SCP 上传 → Docker cp → parse.py 解析 → 文件归档 → 钉钉通知（如果 `.env` 已配置 `DINGTALK_WEBHOOK`）
 
 > **提示**：脚本支持在目录后附加文件名参数，只处理指定的文件。不加文件名参数则处理该目录下所有 XML 文件。
+> **输出要求**：执行结束后必须在当前 job 的 `output/` 下写入 `summary.txt` 和 `update-result.json`。如果脚本失败，也要写明失败阶段和原因。
 
 ---
 
@@ -90,7 +104,7 @@ cnvd-weekly-db-update/
 配置方式：
 
 ```bash
-cd /Users/yao/.claude/skills/cnvd-weekly-db-update
+cd /root/.agents/skills/cnvd-weekly-db-update
 cp .env.example .env
 vim .env
 ```

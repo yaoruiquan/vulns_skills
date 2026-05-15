@@ -151,18 +151,18 @@ def draw_template_cover(
     if clear_existing:
         draw.rounded_rectangle([54, 92, 842, 265], radius=8, fill=(244, 250, 250))
 
-    title_box_width = 540
+    title_box_width = 770
     title_font_size = 36
     title_font = font(title_font_size)
     title_lines = wrap_text_by_pixels(values["TITLE"], draw, title_font, title_box_width)[:3]
     line_height = 48
-    y = 105
+    y = 150
     for line in title_lines:
         draw.text((70, y), line, fill="#34294B", font=title_font)
         y += line_height
 
     line_y = max(220, y + 2)
-    draw.line([70, line_y, 545, line_y], fill="#34294B", width=2)
+    draw.line([70, line_y, 760, line_y], fill="#34294B", width=2)
 
     options = [
         ("POC", values.get("POC", "")),

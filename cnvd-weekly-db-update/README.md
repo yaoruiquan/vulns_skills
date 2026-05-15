@@ -29,7 +29,7 @@ claude skills install <GitHub 地址>
 ### 第三步：手动配置 .env
 
 ```
-cd /Users/yao/.claude/skills/cnvd-weekly-db-update
+cd /root/.agents/skills/cnvd-weekly-db-update
 cp .env.example .env
 vim .env
 ```
@@ -41,7 +41,7 @@ vim .env
 ### 第四步：启动 agent
 
 ```
-cd /Users/yao/.claude/skills/cnvd-weekly-db-update
+cd /data/work/jobs/{job_id}
 claude
 ```
 
@@ -63,11 +63,24 @@ ssh root@10.50.10.8 "echo 'SSH OK'"
 cp .env.example .env
 ```
 
-### 第六步：执行数据库更新
+### 第六步：上传 XML 并执行数据库更新
+
+通过前端或 API 先上传 CNVD 周库 XML，文件必须位于当前 job：
 
 ```
-/cnvd-weekly-db-update /path/to/XML文件.xml
+input/xml/2026-XX-XX_2026-XX-XX.xml
 ```
+
+然后调用 skill。脚本默认只读取当前 job 的 `input/xml/*.xml`，不会读取 `~/Downloads` 或本机绝对路径。
+
+```
+/cnvd-weekly-db-update
+```
+
+执行前确认运行配置：
+
+- `check` 模式只检查 XML 和远端环境，不写入数据库。
+- `update` 模式需要同时把 `dry_run` 设为 `false`，才会真正上传并解析入库。
 
 ## 目录结构
 

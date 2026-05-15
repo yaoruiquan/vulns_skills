@@ -61,16 +61,16 @@ ssh-add ~/.ssh/id_rsa
 **排查步骤**：
 
 ```bash
-# 检查 Downloads 目录
-ls ~/Downloads/*.xml
+# 检查当前 job 输入目录
+ls input/xml/*.xml
 
 # 检查文件名格式
-ls ~/Downloads/2026-*.xml
+ls input/xml/2026-*.xml
 ```
 
 **解决方案**：
 - 确保文件名格式正确：`YYYY-MM-DD_YYYY-MM-DD.xml`
-- 确保文件在 `~/Downloads` 目录
+- 确保文件已通过前端或 API 上传到当前 job 的 `input/xml/` 目录
 
 ### 2.2 SCP 上传中断
 
@@ -78,7 +78,7 @@ ls ~/Downloads/2026-*.xml
 
 ```bash
 # 使用 -C 启用压缩
-scp -C ~/Downloads/2026-*.xml root@10.50.10.8:/tmp/
+scp -C input/xml/2026-*.xml root@10.50.10.8:/tmp/
 ```
 
 ---

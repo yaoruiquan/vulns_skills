@@ -16,7 +16,7 @@ def recognize_with_fallback(image_path, context="login", preprocess="cnvd",
 
     Args:
         image_path: 验证码图片路径
-        context: 上下文（login/submit）
+        context: 上下文（portal/login/submit/waf）
         preprocess: OCR 预处理模式
         max_ocr_attempts: OCR 最大尝试次数
         state_file: 状态文件路径（用于跨调用计数）
@@ -64,6 +64,15 @@ def recognize_with_fallback(image_path, context="login", preprocess="cnvd",
             "attempts": state["ocr_attempts"]
         }
 
+    invalid_words = ["看不清", "点击更换", "存在", "二进制", "验证码"]
+    if not result or any(word in result for word in invalid_words):
+        return {
+            "ok": False,
+            "error": "INVALID_OCR_TEXT: {}".format(result),
+            "method": "ocr",
+            "attempts": state["ocr_attempts"]
+        }
+
     return {
         "ok": True,
         "code": result,
@@ -107,7 +116,7 @@ def request_manual_input(image_path, context):
 def parse_args():
     parser = argparse.ArgumentParser(description="验证码识别（OCR + 人工回退）")
     parser.add_argument("image_path", help="验证码图片路径")
-    parser.add_argument("--context", default="login", choices=["portal", "login", "submit"],
+    parser.add_argument("--context", default="login", choices=["portal", "login", "submit", "waf"],
                         help="验证码上下文")
     parser.add_argument("--preprocess", default="cnvd", choices=["none", "cnvd"],
                         help="OCR 预处理模式")
