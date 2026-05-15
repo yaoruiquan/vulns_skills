@@ -9,7 +9,6 @@ import json
 import mimetypes
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -95,6 +94,14 @@ def upload_article_image(data: bytes, filename: str, mime: str, token: str) -> s
     return url
 
 
+def create_draft(payload: dict, token: str) -> dict:
+    return request_json(
+        f"https://api.weixin.qq.com/cgi-bin/draft/add?access_token={token}",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+
+
 def replace_data_uri_images(content: str, token: str) -> str:
     def replace(match: re.Match[str]) -> str:
         fmt = match.group(1).lower()
@@ -132,38 +139,42 @@ def main() -> int:
     parser.add_argument("cover_image", type=Path)
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--draft-json", type=Path)
-    parser.add_argument("--create", action="store_true", help="Run md2wechat create_draft after writing JSON")
+    parser.add_argument("--create", action="store_true", help="Create the WeChat draft after writing JSON")
+    parser.add_argument("--result-json", type=Path, help="Write machine-readable result JSON to this file")
     parser.add_argument("--json", action="store_true", help="Print machine-readable result")
     args = parser.parse_args()
 
-    load_local_env()
-    metadata = args.metadata or args.html_file.with_suffix(args.html_file.suffix + ".meta.json")
-    draft_json = args.draft_json or Path(tempfile.gettempdir()) / f"{args.html_file.stem}.draft.json"
-    payload = build_draft(args.html_file, args.cover_image, metadata, draft_json)
+    try:
+        load_local_env()
+        metadata = args.metadata or args.html_file.with_suffix(args.html_file.suffix + ".meta.json")
+        draft_json = args.draft_json or Path(tempfile.gettempdir()) / f"{args.html_file.stem}.draft.json"
+        payload = build_draft(args.html_file, args.cover_image, metadata, draft_json)
 
-    result: dict = {
-        "success": True,
-        "draft_json": str(draft_json),
-        "title": payload["articles"][0]["title"],
-    }
-    if args.create:
-        completed = subprocess.run(
-            ["md2wechat", "create_draft", str(draft_json), "--json"],
-            check=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        result["create_draft_exit_code"] = completed.returncode
-        result["create_draft_stdout"] = completed.stdout.strip()
-        result["create_draft_stderr"] = completed.stderr.strip()
-        if completed.returncode != 0:
-            result["success"] = False
+        result: dict = {
+            "success": True,
+            "draft_json": str(draft_json),
+            "title": payload["articles"][0]["title"],
+        }
+        if args.create:
+            token = access_token()
+            draft_result = create_draft(payload, token)
+            result["create_draft_result"] = draft_result
+            if draft_result.get("errcode") not in (None, 0):
+                result["success"] = False
+                result["error"] = draft_result.get("errmsg") or str(draft_result)
+            else:
+                result["media_id"] = draft_result.get("media_id", "")
+    except Exception as exc:
+        result = {"success": False, "error": str(exc)}
+
+    if args.result_json:
+        args.result_json.parent.mkdir(parents=True, exist_ok=True)
+        args.result_json.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False))
     else:
-        print(result["draft_json"])
+        print(result.get("draft_json", ""))
     return 0 if result["success"] else 1
 
 
