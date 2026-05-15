@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import re
 import shutil
@@ -21,16 +22,91 @@ CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 LEVEL_PATTERN = re.compile(r"(严重|超危|危急|高危|中危|低危)")
 
 
+def normalize_space(text: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def strip_markdown(text: str) -> str:
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[*_`#]+", "", text)
+    return normalize_space(text)
+
+
+def table_to_key_values(rows: list[list[str]]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for row in rows:
+        cells = [strip_markdown(cell) for cell in row if strip_markdown(cell)]
+        if len(cells) == 2:
+            result.setdefault(cells[0], cells[1])
+        elif len(cells) >= 4:
+            for index in range(0, len(cells) - 1, 2):
+                if cells[index] and cells[index + 1]:
+                    result.setdefault(cells[index], cells[index + 1])
+    return result
+
+
+def extract_pipe_tables(markdown: str) -> list[list[list[str]]]:
+    tables: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in cells if cell.strip()):
+                continue
+            current.append(cells)
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    return tables
+
+
+def extract_html_tables(markdown: str) -> list[list[list[str]]]:
+    tables: list[list[list[str]]] = []
+    for table_html in re.findall(r"<table\b.*?</table>", markdown, flags=re.I | re.S):
+        rows: list[list[str]] = []
+        for row_html in re.findall(r"<tr\b[^>]*>(.*?)</tr>", table_html, flags=re.I | re.S):
+            cells = []
+            for cell_html in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", row_html, flags=re.I | re.S):
+                value = strip_markdown(re.sub(r"<br\s*/?>", " ", cell_html, flags=re.I))
+                if value:
+                    cells.append(value)
+            if cells:
+                rows.append(cells)
+        if rows:
+            tables.append(rows)
+    return tables
+
+
+def is_section_heading(title: str) -> bool:
+    normalized = re.sub(r"^(?:第?[一二三四五六七八九十]+|[0-9]+)[、.．]\s*", "", title).replace(" ", "")
+    return normalized in {"安全通告", "漏洞信息", "漏洞描述", "影响范围", "修复方案", "修复建议", "参考资料", "产品能力覆盖"}
+
+
+def extract_title(text: str, fallback: str) -> str:
+    for table in [*extract_pipe_tables(text), *extract_html_tables(text)]:
+        values = table_to_key_values(table)
+        title = values.get("漏洞标题") or values.get("漏洞名称")
+        if title:
+            return title
+
+    for line in text.splitlines():
+        match = re.match(r"^\s{0,3}#{1,6}\s*(.+?)\s*$", line)
+        if not match:
+            continue
+        title = strip_markdown(match.group(1))
+        if title and not is_section_heading(title):
+            return title
+    return fallback
+
+
 def read_markdown_metadata(markdown_path: Path) -> dict[str, str]:
     text = markdown_path.read_text(encoding="utf-8")
-    title = ""
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            title = stripped[2:].strip()
-            break
-    if not title:
-        title = markdown_path.stem
+    title = extract_title(text, markdown_path.stem)
     # 去除标题前缀标记如 【已复现】、【风险通告】、【漏洞预警】等
     title = re.sub(r"^【[^】]*】\s*", "", title)
     cve_match = CVE_PATTERN.search(text)
@@ -128,6 +204,14 @@ def draw_template_cover(
         if font_path and Path(font_path).is_file():
             return ImageFont.truetype(font_path, size=size)
         candidates = [
+            str(SKILL_ROOT / "assets" / "fonts" / "SourceHanSansCN-Bold.otf"),
+            str(SKILL_ROOT / "assets" / "fonts" / "SourceHanSansSC-Bold.otf"),
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/local/share/fonts/SourceHanSansCN-Bold.otf",
+            "/usr/local/share/fonts/SourceHanSansSC-Bold.otf",
             "/Users/yao/Library/Fonts/SourceHanSansCN-Bold.otf",
             "/Users/yao/Library/Fonts/SourceHanSansSC-Bold.otf",
             "/Library/Fonts/SourceHanSansCN-Bold.otf",

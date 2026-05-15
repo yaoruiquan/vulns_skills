@@ -23,6 +23,9 @@ DEFAULT_MICROSOFT_TEMPLATE = SKILL_ROOT / "assets" / "wechat-microsoft-monthly-t
 DEFAULT_HEADER_IMAGE = SKILL_ROOT / "assets" / "logo.png"
 
 FORBIDDEN_OUTPUT = ("<style", "<script", "class=", "contenteditable=", "ProseMirror", "onclick=")
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+SCREENSHOT_PATTERN = re.compile(r"复现|截图|reproduce|screenshot|poc|图\d+", re.I)
+LOGO_PATTERN = re.compile(r"logo|封面|cover|header|banner", re.I)
 
 
 def load_local_env() -> None:
@@ -138,12 +141,33 @@ def escape(text: str) -> str:
 
 
 def extract_tables(markdown: str) -> list[list[list[str]]]:
+    pipe_tables = extract_pipe_tables(markdown)
+    if pipe_tables:
+        return pipe_tables
     regex_tables = extract_tables_lenient(markdown)
     if regex_tables:
         return regex_tables
     parser = TableParser()
     parser.feed(markdown)
     return parser.tables
+
+
+def extract_pipe_tables(markdown: str) -> list[list[list[str]]]:
+    tables: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [normalize_space(cell) for cell in stripped.strip("|").split("|")]
+            if all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in cells if cell.strip()):
+                continue
+            current.append(cells)
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    return tables
 
 
 def extract_tables_lenient(markdown: str) -> list[list[list[str]]]:
@@ -218,7 +242,48 @@ def normalize_heading(text: str) -> str:
     return text.replace(" ", "")
 
 
-def find_reproduction_screenshots(source: Path, title: str) -> list[Path]:
+def markdown_image_references(markdown: str, source: Path) -> list[tuple[str, Path]]:
+    """Return local Markdown image references as (alt, path) pairs."""
+    directory = source.parent
+    refs: list[tuple[str, Path]] = []
+    for match in re.finditer(r"!\[([^\]]*)\]\(([^)]+)\)", markdown):
+        alt = normalize_space(match.group(1))
+        raw_target = match.group(2).strip()
+        raw_target = raw_target.split(None, 1)[0].strip("<>")
+        if not raw_target or re.match(r"^(?:https?:|data:)", raw_target, re.I):
+            continue
+        parsed = urllib.parse.urlparse(raw_target)
+        if parsed.scheme:
+            continue
+        local_path = directory / urllib.parse.unquote(parsed.path)
+        if local_path.is_file() and local_path.suffix.lower() in IMAGE_EXTENSIONS:
+            refs.append((alt, local_path.resolve()))
+    return refs
+
+
+def missing_markdown_images(markdown: str, source: Path) -> list[str]:
+    """Return missing local Markdown image targets for summary/reporting."""
+    directory = source.parent
+    missing: list[str] = []
+    for match in re.finditer(r"!\[([^\]]*)\]\(([^)]+)\)", markdown):
+        alt = normalize_space(match.group(1))
+        raw_target = match.group(2).strip()
+        raw_target = raw_target.split(None, 1)[0].strip("<>")
+        if not raw_target or re.match(r"^(?:https?:|data:)", raw_target, re.I):
+            continue
+        parsed = urllib.parse.urlparse(raw_target)
+        if parsed.scheme:
+            continue
+        local_path = directory / urllib.parse.unquote(parsed.path)
+        marker = f"{alt} {Path(parsed.path).name}"
+        if local_path.is_file():
+            continue
+        if SCREENSHOT_PATTERN.search(marker) and not LOGO_PATTERN.search(marker):
+            missing.append(raw_target)
+    return list(dict.fromkeys(missing))
+
+
+def find_reproduction_screenshots(source: Path, title: str, markdown: str = "") -> list[Path]:
     """Find reproduction screenshots in the same directory as the markdown file.
 
     Matches are determined by extracting identifiers from the title (CVE ID,
@@ -229,37 +294,50 @@ def find_reproduction_screenshots(source: Path, title: str) -> list[Path]:
     if not directory.is_dir():
         return []
 
+    referenced: list[Path] = []
+    referenced_fallback: list[Path] = []
+    for alt, image_path in markdown_image_references(markdown, source):
+        marker = f"{alt} {image_path.name}"
+        if LOGO_PATTERN.search(marker):
+            continue
+        if SCREENSHOT_PATTERN.search(marker):
+            referenced.append(image_path)
+        else:
+            referenced_fallback.append(image_path)
+    if referenced:
+        return list(dict.fromkeys(referenced))
+
     cve_match = re.search(r"CVE-\d{4}-\d{4,}", title, re.I)
     cve_id = cve_match.group(0) if cve_match else None
     source_stem = source.stem
 
-    image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
     image_files = sorted(
         f for f in directory.iterdir()
-        if f.is_file() and f.suffix.lower() in image_extensions
+        if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS
     )
 
     if not image_files:
-        return []
+        return list(dict.fromkeys(referenced_fallback))
 
     matched: list[Path] = []
     unmatched: list[Path] = []
-    screenshot_pattern = re.compile(r"复现|截图|reproduce|screenshot|图\d+", re.I)
 
     for f in image_files:
         name_lower = f.stem.lower()
+        if LOGO_PATTERN.search(f.name):
+            continue
         if cve_id and cve_id.lower() in name_lower:
             matched.append(f)
         elif source_stem.lower() in name_lower and source_stem.lower():
             matched.append(f)
-        elif screenshot_pattern.search(name_lower):
+        elif SCREENSHOT_PATTERN.search(name_lower):
             matched.append(f)
         else:
             unmatched.append(f)
 
     result = sorted(matched, key=lambda p: p.stem)
     if not result:
-        result = sorted(unmatched, key=lambda p: p.stem)
+        result = referenced_fallback or sorted(unmatched, key=lambda p: p.stem)
     return result
 
 
@@ -481,7 +559,7 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     sections = split_sections(markdown)
     data = AlertData(overview=overview)
     data.title = extract_title(markdown, overview, source)
-    data.reproduction_images = find_reproduction_screenshots(source, data.title)
+    data.reproduction_images = find_reproduction_screenshots(source, data.title, markdown)
 
     preface = plain_paragraphs(sections.get("__preface__", ""))
     notice = plain_paragraphs(find_section(sections, "安全通告"))
@@ -1343,6 +1421,7 @@ def main() -> int:
             "references": len(data.references),
             "product_coverage_rows": max(0, len(data.product_coverage) - 1),
             "reproduction_images": [str(path) for path in data.reproduction_images],
+            "missing_reproduction_images": missing_markdown_images(markdown, args.markdown_file),
         }
 
     # Optional: upload base64 images to WeChat CDN when credentials are available
