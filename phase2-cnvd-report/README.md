@@ -48,17 +48,14 @@ claude
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口和 profile 不冲突。
 
-验证码识别默认使用 MCP 截图验证码图片元素到 `/tmp/captcha.png`，再执行：
+验证码识别默认使用 MCP 截图验证码图片元素到 `/tmp/captcha.png`，再执行当前主流程命令：
 
 ```bash
-# 推荐：带人工回退（OCR 失败 2 次后自动切换人工识别）
-python3 scripts/captcha_recognize.py /tmp/captcha.png \
-  --context login \
-  --state-file /tmp/captcha_state_login.json
-
-# 或纯 OCR（不含人工回退）
+# 当前真实运行路径：单次本地 OCR
 python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 ```
+
+`scripts/captcha_recognize.py` 仍保留在仓库中，但不是主流程默认命令。只有 CNVD 防火墙/WAF 访问验证码会按服务化 prompt 规则先 OCR 最多 3 次，仍失败后再切换前端人工输入；普通登录验证码和提交验证码继续按 skill 脚本 OCR 自动处理。
 
 ### 第五步：调用 skill
 
@@ -117,6 +114,7 @@ phase2-cnvd-report/
 │   ├── batch_report.py
 │   ├── publish_submission_zip.py
 │   ├── captcha_ocr.py
+│   ├── captcha_recognize.py      # 保留脚本，不是当前主流程默认命令
 │   └── dingtalk_notify.py
 └── references/           # agent 执行参考
     ├── workflow.md

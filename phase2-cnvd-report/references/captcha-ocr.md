@@ -17,70 +17,65 @@
 ### 脚本位置
 
 ```
-scripts/captcha_recognize.py  # 推荐：带人工回退
-scripts/captcha_ocr.py         # 纯 OCR，无回退
+scripts/captcha_ocr.py         # 当前主流程：单次本地 OCR
+scripts/captcha_recognize.py   # 保留脚本：不作为当前主流程默认命令
 ```
 
 ### 使用方法
 
-**必须使用带人工回退的 captcha_recognize.py**：
+当前真实运行路径以 `form_context.json.ocr.recognize_command` 为准：
 
 ```bash
 # 登录验证码
-python3 scripts/captcha_recognize.py /tmp/captcha.png \
-  --context login \
-  --max-ocr-attempts 2 \
-  --state-file /tmp/captcha_state_login.json
+python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 
 # 提交验证码
-python3 scripts/captcha_recognize.py /tmp/captcha.png \
-  --context submit \
-  --max-ocr-attempts 2 \
-  --state-file /tmp/captcha_state_submit.json
+python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 
 # 防火墙验证码：先 OCR 3 次，仍失败再人工
-python3 scripts/captcha_recognize.py /tmp/cnvd-waf-captcha.png \
-  --context waf \
-  --max-ocr-attempts 3 \
-  --state-file /tmp/captcha_state_cnvd_waf.json
+python3 scripts/captcha_ocr.py /tmp/cnvd-waf-captcha-1.png --preprocess cnvd
 
 # 完整流程（必须按此顺序）
 python3 scripts/browser_snippets.py captcha-tab
-python3 scripts/captcha_recognize.py /tmp/captcha.png \
-  --context login \
-  --state-file /tmp/captcha_state_login.json
+python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 ```
 
-**禁止使用 captcha_ocr.py**（无人工回退，识别率低时会无限循环）
+普通登录验证码和提交验证码不走前端人工；识别失败时重新打开当前验证码图片、重新截图、重新 OCR，不复用旧标签页和旧识别结果。只有 CNVD 防火墙/WAF 访问验证码在连续 3 次 OCR 失败后才等待前端人工输入。
 
 参数说明：
 
 | 参数 | 必填 | 作用 |
 |------|------|------|
-| `--context login/submit` | 是 | 验证码上下文，用于区分登录和提交验证码 |
-| `--state-file <path>` | 是 | 状态文件路径，用于跨调用计数失败次数 |
-| `--context waf` | 是 | CNVD 防火墙/WAF 访问验证码；必须先 OCR 3 次，仍未通过再人工 |
-| `--max-ocr-attempts 2/3` | 否 | OCR 最大尝试次数；登录/提交默认 2，防火墙验证码使用 3，超过后切换到人工识别 |
-| `--preprocess cnvd` | 否 | OCR 预处理模式，默认已启用 |
+| `/tmp/captcha.png` | 是 | MCP 截取的验证码图片元素本体 |
+| `--preprocess cnvd` | 是 | CNVD 验证码预处理模式：自动对比度、放大，并兼容旧截图裁剪 |
+| `--crop-box` | 否 | 仅用于旧截图排障；主流程不依赖 |
+| `--scale` | 否 | 识别前放大倍数；`--preprocess cnvd` 会至少放大 3 倍 |
 
 ## 当前识别逻辑
 
-### OCR + 人工回退（推荐）
-
-使用 `captcha_recognize.py`：
-
-1. **前 N 次**：使用 `ddddocr` 自动识别；CNVD 防火墙/WAF 验证码 N=3
-2. **第 N+1 次**：OCR 失败次数达到阈值，自动切换到人工识别
-3. **状态持久化**：通过 `--state-file` 跨调用计数失败次数
-4. **成功后重置**：登录成功后删除状态文件，重置计数
-
-### 纯 OCR（不推荐）
+### 普通验证码：captcha_ocr.py 单次识别
 
 使用 `captcha_ocr.py`：
 
-- 每次执行都会启动 Python 进程并加载一次 `ddddocr` 模型
-- 不含失败计数和人工回退机制
-- 适合测试或确定 OCR 识别率高的场景
+1. MCP 只截验证码图片元素本体到 `/tmp/captcha.png`。
+2. 执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd`。
+3. OCR 返回后立即用 `browser_helpers.submit_captcha_command_template` 或 `scripts/browser_snippets.py submit-captcha` 填入并提交。
+4. 如果页面提示验证码错误，重新执行 `captcha-tab` 打开新验证码，重新截图和识别。
+5. 如果 OCR 返回空、`ERROR` 或页面提示文字，禁止提交该值。
+
+### CNVD 防火墙/WAF：3 次 OCR 后人工
+
+防火墙/WAF 访问验证码的识别特征包括页面标题或正文出现“本站开启了验证码保护”“请输入验证码，以继续访问”“防火墙”“WAF”等。
+
+1. 保存当前防火墙页截图到 `logs/human-cnvd-firewall.png` 或 `logs/human-cnvd-firewall-<attempt>.png`。
+2. 截取真实验证码 img 元素到 `/tmp/cnvd-waf-captcha-<attempt>.png`。
+3. 执行 `python3 scripts/captcha_ocr.py /tmp/cnvd-waf-captcha-<attempt>.png --preprocess cnvd`。
+4. 最多尝试 3 次，每次失败后必须刷新或换新图，不复用旧验证码和旧结果。
+5. 连续 3 次仍未通过、无法取得真实验证码 img、验证码图片加载失败，或页面只剩占位文字时，写入 `progress.jsonl` 的 warning：`等待人工防火墙验证码`，等待前端人工输入。
+
+### captcha_recognize.py 状态
+
+`scripts/captcha_recognize.py` 保留在仓库中，作为历史包装脚本和排障备用脚本；当前 `prepare_form_context.py` 生成的主流程命令不是它。服务化执行时不要把普通登录验证码或提交验证码切换到 `captcha_recognize.py` 的人工回退路径。
 
 ## 自动化流程
 
@@ -95,25 +90,22 @@ python3 scripts/captcha_recognize.py /tmp/captcha.png \
 │  2. MCP 只截验证码 img 元素到 /tmp/captcha.png                │
 │     （禁止截整页/视口）                                       │
 │         ↓                                                    │
-│  3. 执行带人工回退的识别脚本                                  │
-│     python3 scripts/captcha_recognize.py /tmp/captcha.png \  │
-│       --context login \                                      │
-│       --state-file /tmp/captcha_state_login.json             │
+│  3. 执行当前主流程 OCR 命令                                   │
+│     python3 scripts/captcha_ocr.py /tmp/captcha.png \        │
+│       --preprocess cnvd                                      │
 │         ↓                                                    │
-│  4. OCR 识别（前 2 次）                                       │
-│     ├── 成功 → 返回识别结果                                   │
-│     └── 失败 → 计数 +1，刷新验证码重试                        │
+│  4. OCR 返回识别结果                                          │
+│     ├── 成功 → 立即填入并提交                                 │
+│     └── 失败 → 刷新/换图后重新截图识别                        │
 │         ↓                                                    │
-│  5. 失败 2 次后自动切换人工识别                               │
-│     脚本输出 "MANUAL_INPUT_REQUIRED"                          │
-│     等待前端用户输入验证码                                    │
+│  5. 仅防火墙/WAF 验证码连续 3 次 OCR 失败后等待前端人工        │
 │         ↓                                                    │
 │  6. 填入验证码并提交                                          │
 │     同一次 evaluate_script 完成                               │
 │         ↓                                                    │
 │  7. 检查结果                                                 │
-│     ├── 成功 → 删除状态文件，重置计数                         │
-│     └── 失败 → 保持计数，继续人工识别                         │
+│     ├── 成功 → 提取 CNVD 编号                                 │
+│     └── 失败 → 记录 summary 并说明失败点                      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
