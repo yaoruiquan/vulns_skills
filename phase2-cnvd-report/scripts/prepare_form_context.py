@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
@@ -20,6 +21,13 @@ DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
     "FORM_CONTEXT_DIR",
     "/tmp/vulns-skills/phase2-cnvd-report/form-contexts",
 )
+
+
+def shell_command_for_attachment(command: str, attachment_path: str) -> str:
+    return "python3 scripts/browser_snippets.py {} --attachment-path {}".format(
+        command,
+        shlex.quote(attachment_path),
+    )
 
 
 def extract_das_id_from_name(name: str) -> str:
@@ -267,6 +275,14 @@ def build_context(args: argparse.Namespace) -> dict:
                 form_type["form_type_label"],
                 data.get("vuln_type", ""),
                 object_type_label,
+            ),
+            "attachment_prepare_command": shell_command_for_attachment(
+                "attachment-prepare",
+                data.get("attachment_zip_path", ""),
+            ),
+            "attachment_verify_command": shell_command_for_attachment(
+                "attachment-verify",
+                data.get("attachment_zip_path", ""),
             ),
             "open_captcha_tab_command": "python3 scripts/browser_snippets.py captcha-tab",
             "captcha_preview_command": "python3 scripts/browser_snippets.py captcha-tab",

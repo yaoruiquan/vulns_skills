@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 
 
@@ -159,7 +160,13 @@ def captcha_tab_script() -> str:
   }
   const win = window.open(src, '_blank');
   if (!win) return { ok: false, reason: '新窗口被浏览器拦截', src };
-  return { ok: true, src, openedNewTab: true, currentTab: location.href };
+  return {
+    ok: true,
+    src,
+    openedNewTab: true,
+    currentTab: location.href,
+    screenshotRule: '切到新标签页后只能截验证码 img 元素到 /tmp/captcha.png；禁止截整页或视口。'
+  };
 }""")
 
 
@@ -205,6 +212,150 @@ def is_open_no_script() -> str:
 }""")
 
 
+def attachment_prepare_script(attachment_path: str) -> str:
+    """生成上传附件前定位并标记当前可见 file input 的脚本。"""
+    expected_name = os.path.basename(attachment_path)
+    return as_iife(f"""() => {{
+  const expectedName = {js_string(expected_name)};
+  const expectedPath = {js_string(attachment_path)};
+  const isVisible = (el) => {{
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const form = el.closest('form');
+    const formStyle = form ? getComputedStyle(form) : null;
+    const formRect = form ? form.getBoundingClientRect() : null;
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      Number(style.opacity || '1') > 0 &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      (!form || (
+        formStyle.display !== 'none' &&
+        formStyle.visibility !== 'hidden' &&
+        formRect.width > 0 &&
+        formRect.height > 0
+      ));
+  }};
+  const inputs = Array.from(document.querySelectorAll('input[type="file"][name="flawAttFile"], #flawAttFile1, #flawAttFile'));
+  const details = inputs.map((el, index) => ({{
+    index,
+    id: el.id || '',
+    name: el.name || '',
+    visible: isVisible(el),
+    disabled: el.disabled,
+    accept: el.accept || '',
+    files: el.files ? el.files.length : 0,
+    fileName: el.files && el.files[0] ? el.files[0].name : '',
+    formId: el.closest('form') ? (el.closest('form').id || '') : ''
+  }}));
+  const target = inputs.find((el) => el.id === 'flawAttFile1' && isVisible(el)) ||
+    inputs.find((el) => isVisible(el) && el.name === 'flawAttFile') ||
+    inputs.find((el) => isVisible(el));
+  if (!target) {{
+    return {{
+      ok: false,
+      code: 'CNVD_ATTACHMENT_TARGET_NOT_FOUND',
+      reason: '未找到当前可见的漏洞附件 file input；禁止猜测上传目标。',
+      expectedName,
+      expectedPath,
+      inputs: details
+    }};
+  }}
+  for (const el of inputs) {{
+    el.removeAttribute('data-opencode-upload-target');
+    el.removeAttribute('aria-label');
+    if (el !== target && !isVisible(el)) {{
+      el.disabled = true;
+      el.setAttribute('data-opencode-disabled-duplicate', 'true');
+    }}
+  }}
+  target.disabled = false;
+  target.setAttribute('data-opencode-upload-target', 'cnvd-attachment');
+  target.setAttribute('aria-label', `CNVD 附件上传目标：仅将 ${{expectedName}} 上传到此控件`);
+  target.scrollIntoView({{ block: 'center', inline: 'center' }});
+  return {{
+    ok: true,
+    code: 'CNVD_ATTACHMENT_TARGET_READY',
+    targetId: target.id || '',
+    targetName: target.name || '',
+    targetSelector: target.id ? `#${{target.id}}` : 'input[type=file][name=flawAttFile]',
+    expectedName,
+    expectedPath,
+    uploadRule: '接下来必须 take_snapshot，并且只对带有 aria-label=\"CNVD 附件上传目标\" 的 file input 执行 MCP upload_file；禁止上传到其他 file input，禁止用 JS/DataTransfer/fetch 构造文件。',
+    inputs: details
+  }};
+}}""")
+
+
+def attachment_verify_script(attachment_path: str) -> str:
+    """生成上传附件后的强校验脚本。"""
+    expected_name = os.path.basename(attachment_path)
+    return as_iife(f"""() => {{
+  const expectedName = {js_string(expected_name)};
+  const expectedPath = {js_string(attachment_path)};
+  const invalidExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  const isVisible = (el) => {{
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const form = el.closest('form');
+    const formStyle = form ? getComputedStyle(form) : null;
+    const formRect = form ? form.getBoundingClientRect() : null;
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      Number(style.opacity || '1') > 0 &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      (!form || (
+        formStyle.display !== 'none' &&
+        formStyle.visibility !== 'hidden' &&
+        formRect.width > 0 &&
+        formRect.height > 0
+      ));
+  }};
+  const inputs = Array.from(document.querySelectorAll('input[type="file"][name="flawAttFile"], #flawAttFile1, #flawAttFile'));
+  const target = inputs.find((el) => el.getAttribute('data-opencode-upload-target') === 'cnvd-attachment') ||
+    inputs.find((el) => el.id === 'flawAttFile1' && isVisible(el)) ||
+    inputs.find((el) => isVisible(el) && el.name === 'flawAttFile');
+  const details = inputs.map((el, index) => ({{
+    index,
+    id: el.id || '',
+    name: el.name || '',
+    visible: isVisible(el),
+    disabled: el.disabled,
+    markedTarget: el.getAttribute('data-opencode-upload-target') === 'cnvd-attachment',
+    files: el.files ? el.files.length : 0,
+    fileName: el.files && el.files[0] ? el.files[0].name : '',
+    fileSize: el.files && el.files[0] ? el.files[0].size : 0,
+    formId: el.closest('form') ? (el.closest('form').id || '') : ''
+  }}));
+  if (!target) {{
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_TARGET_LOST', reason: '上传后找不到可见附件目标，禁止继续提交。', expectedName, expectedPath, inputs: details }};
+  }}
+  const file = target.files && target.files[0] ? target.files[0] : null;
+  if (!file) {{
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: '当前可见附件 input 没有文件，禁止继续提交。', expectedName, expectedPath, targetId: target.id || '', inputs: details }};
+  }}
+  if (file.name !== expectedName) {{
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_MISMATCH', reason: `附件文件名不匹配，期望 ${{expectedName}}，实际 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
+  }}
+  if (!/\\.zip$/i.test(file.name) || invalidExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))) {{
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_INVALID_TYPE', reason: `附件必须是 form_context.json.attachment_zip_path 指向的 zip，实际为 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
+  }}
+  return {{
+    ok: true,
+    code: 'CNVD_ATTACHMENT_VERIFIED',
+    targetId: target.id || '',
+    fileName: file.name,
+    fileSize: file.size,
+    expectedName,
+    expectedPath,
+    inputs: details
+  }};
+}}""")
+
+
 def submit_captcha_script(code: str) -> str:
     """生成填验证码并立即提交脚本。"""
     return as_iife(f"""() => {{
@@ -244,6 +395,12 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("login-guard", help="输出登录态和 Cloudflare 拦截检查脚本")
     sub.add_parser("is-open", help="输出将是否公开设为否的脚本（处理 CNVD 两组 radio 的问题）")
 
+    attachment_prepare = sub.add_parser("attachment-prepare", help="输出上传 CNVD 附件前定位当前可见 file input 的脚本")
+    attachment_prepare.add_argument("--attachment-path", required=True)
+
+    attachment_verify = sub.add_parser("attachment-verify", help="输出上传 CNVD 附件后的强校验脚本")
+    attachment_verify.add_argument("--attachment-path", required=True)
+
     submit = sub.add_parser("submit-captcha", help="输出填入验证码并立即提交脚本")
     submit.add_argument("code")
     return parser.parse_args()
@@ -261,6 +418,10 @@ def main() -> int:
         print(login_guard_script())
     elif args.command == "is-open":
         print(is_open_no_script())
+    elif args.command == "attachment-prepare":
+        print(attachment_prepare_script(args.attachment_path))
+    elif args.command == "attachment-verify":
+        print(attachment_verify_script(args.attachment_path))
     elif args.command == "submit-captcha":
         print(submit_captcha_script(args.code))
     return 0

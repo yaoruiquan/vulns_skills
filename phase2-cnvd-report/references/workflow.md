@@ -267,14 +267,76 @@ MCP: fill_form
 
 ## Step 4: 上传附件
 
+附件上传必须走 `form_context.json.browser_helpers` 的两段式强校验。不要直接凭 a11y 树猜 file input；CNVD 页面通常同时存在隐藏表单的 `#flawAttFile` 和当前可见表单的 `#flawAttFile1`，上传错 input 会导致平台报 `请按规定上传附件，附件格式不正确！`。
+
+### 4.1 定位当前可见附件 input
+
+先执行 `browser_helpers.attachment_prepare_command`：
+
+```bash
+python3 scripts/browser_snippets.py attachment-prepare --attachment-path "<attachment_zip_path>"
+```
+
+把输出内容粘贴到 MCP：
+
+```text
+MCP: evaluate_script
+  function: |
+    <browser_snippets.py attachment-prepare 输出内容>
+```
+
+返回必须满足：
+
+- `ok=true`
+- `code=CNVD_ATTACHMENT_TARGET_READY`
+- `targetId` 优先为 `flawAttFile1`
+- `uploadRule` 明确要求只上传到带有 `aria-label="CNVD 附件上传目标"` 的控件
+
+如果返回 `ok=false`，立即写 `output/summary.txt` 说明找不到当前可见附件 input，然后停止；不要自己尝试 `querySelector`、`DataTransfer`、`fetch` 或临时构造文件。
+
+### 4.2 上传原始 CNVD zip
+
+然后执行一次 `take_snapshot`，在快照中找到 `attachment-prepare` 标记过的 file input，再上传 `attachment_zip_path`：
+
 ```
 MCP: take_snapshot
 MCP: upload_file
-  uid: "<文件上传输入框的 uid>"
+  uid: "<带有 CNVD 附件上传目标 aria-label 的文件上传输入框 uid>"
   filePath: "<attachment_zip_path>"
 ```
 
 这里的 `<attachment_zip_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。
+
+禁止事项：
+
+- 禁止上传到未标记的 file input。
+- 禁止把验证码图片、`test.png` 或临时文件作为漏洞附件。
+- 禁止用 JS `DataTransfer`、`fetch('/tmp/...')`、`fetch('http://localhost:...')` 等方式构造文件；浏览器安全模型下这些做法不稳定，且会掩盖真实失败点。
+
+### 4.3 上传后强校验
+
+上传后必须执行 `browser_helpers.attachment_verify_command`：
+
+```bash
+python3 scripts/browser_snippets.py attachment-verify --attachment-path "<attachment_zip_path>"
+```
+
+把输出内容粘贴到 MCP：
+
+```text
+MCP: evaluate_script
+  function: |
+    <browser_snippets.py attachment-verify 输出内容>
+```
+
+返回必须满足：
+
+- `ok=true`
+- `code=CNVD_ATTACHMENT_VERIFIED`
+- `fileName` 等于 `attachment_zip_path` 的 basename
+- `fileName` 以 `.zip` 结尾
+
+如果返回 `CNVD_ATTACHMENT_FILE_EMPTY`、`CNVD_ATTACHMENT_FILE_MISMATCH`、`CNVD_ATTACHMENT_FILE_INVALID_TYPE` 或任意 `ok=false`，立即写 `output/summary.txt` 并停止。不要继续验证码，不要点击提交。
 
 ---
 
@@ -301,7 +363,7 @@ MCP: upload_file
 | 漏洞URL | ✓ 已填写 | 固定填写 `http://test.com` |
 | 临时解决方案 | ✓ 已填写 | 默认填写"无" |
 | 正式解决方案 | ✓ 已填写 | 默认填写"见附件" |
-| 漏洞附件 | ✓ 已上传 | `attachment_zip_path` 指向的 CNVD 原始 zip |
+| 漏洞附件 | ✓ 已上传且通过 `attachment_verify_command` | `attachment_zip_path` 指向的 CNVD 原始 zip |
 | 验证码 | 待填写 | OCR识别后填写 |
 
 同时检查：
@@ -309,7 +371,7 @@ MCP: upload_file
 - `form_context.json` 的 `ready` 为 `true`。
 - 页面联动顺序必须正确：先选 `form_type_label`，再选 `vuln_type`，之后才开始填文本字段。
 - 页面中“漏洞名称”输入值等于 `title_input`。
-- 上传附件路径等于 `attachment_zip_path`。
+- 上传附件通过 `browser_helpers.attachment_verify_command`，页面可见 file input 中的 `fileName` 等于 `attachment_zip_path` 的 basename。
 - 提交后页面返回的最终漏洞标题应等于 `title_final_expected`。
 
 推荐在提交前执行一次页面内校验，避免“表单未填写完整”：
@@ -380,7 +442,7 @@ https://www.cnvd.org.cn/common/myCodeNew?t=0.8846792108682565
 
 如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时不要截图表单页占位文字，不要把“看不清/点击更换/存在/二进制”当验证码提交；应切到防火墙验证码处理：保存防火墙页或当前页截图到 `logs/human-cnvd-firewall.png`，截取防火墙页真实验证码 img 元素后用 `captcha_ocr.py --preprocess cnvd` 最多尝试 3 次。3 次仍未通过再写入 `progress.jsonl` 的 `等待人工防火墙验证码` warning，并等待前端人工输入防火墙验证码后继续。
 
-3. 切到新标签页。新标签页只显示验证码图片，必须只对验证码图片元素截图到 `/tmp/captcha.png`，不要截整个视口，然后识别：
+3. 切到新标签页。新标签页只显示验证码图片，必须只对验证码图片元素截图到 `/tmp/captcha.png`，不要截整个视口，然后识别。若 MCP 工具调用里没有 `uid`，说明你正在截整页/视口，必须停止并重新选择图片元素：
 
 ```bash
 python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd

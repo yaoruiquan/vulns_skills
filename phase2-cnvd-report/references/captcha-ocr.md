@@ -63,6 +63,12 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 4. 如果页面提示验证码错误，重新执行 `captcha-tab` 打开新验证码，重新截图和识别。
 5. 如果 OCR 返回空、`ERROR` 或页面提示文字，禁止提交该值。
 
+普通验证码的硬性边界：
+
+- `captcha-tab` 返回 `ok=true` 后，下一步只能切到验证码图片新标签页，并截图图片元素本体；禁止调用不带 `uid` 的整页/视口截图。
+- 如果因为没有图片元素而只能截整页，说明当前不是普通验证码图片页，必须回到原表单页重新执行 `captcha-tab` 或切换到防火墙验证码流程。
+- 禁止从整页截图、表单页占位文字或“看不清/点击更换”等提示文字中提取 OCR。
+
 ### CNVD 防火墙/WAF：3 次 OCR 后人工
 
 防火墙/WAF 访问验证码的识别特征包括页面标题或正文出现“本站开启了验证码保护”“请输入验证码，以继续访问”“防火墙”“WAF”等。
@@ -123,7 +129,7 @@ python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 1. **直接开图识别**：提交前不要点击刷新；执行 `python3 scripts/browser_snippets.py captcha-tab`，把当前 `#codeSpan1 img.src` 指向的 `/common/myCodeNew?t=...` 打开到新标签页。
    - 如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有成功加载，通常是该图片请求被 CNVD 防火墙验证码拦截。此时不要 OCR 当前页面的“看不清/点击更换”占位文字，必须保存防火墙截图，改为截取防火墙页真实验证码 img 元素，OCR 最多尝试 3 次，仍未通过再等待前端人工输入。
 2. **只截图片元素**：新标签页只截验证码 `<img>` 元素本体到 `/tmp/captcha.png`，不要截整个视口。
-3. **禁止整页截图**：验证码原图通常只有约 `80x35` 像素，整页截图会把图片缩在大画布里，ddddocr 容易返回空字符串。
+3. **禁止整页截图**：验证码原图通常只有约 `80x35` 像素，整页截图会把图片缩在大画布里，ddddocr 容易返回空字符串。MCP `take_screenshot` 必须带验证码图片元素 `uid`；不带 `uid` 的截图视为流程错误。
 4. **单次脚本识别**：默认执行 `python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd`，不启动或复用后台 OCR 进程。
 5. **填入+提交合并**：识别结果返回后，使用一次 `evaluate_script` 设置验证码输入框并点击提交按钮，减少 MCP 往返
 6. **地址校验**：`captcha-tab` 会校验验证码 URL 的 path 必须是 `/common/myCodeNew`，避免误打开页面上的其他图片
