@@ -337,11 +337,14 @@ def attachment_verify_script(attachment_path: str) -> str:
   if (!file) {{
     return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: '当前可见附件 input 没有文件，禁止继续提交。', expectedName, expectedPath, targetId: target.id || '', inputs: details }};
   }}
+  if (!file.size || file.size <= 0) {{
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: `附件文件大小为 0，通常是 Chrome 容器无法读取上传路径或 CDP 中文路径上传失败。禁止继续提交。`, expectedName, actualName: file.name, fileSize: file.size || 0, expectedPath, targetId: target.id || '', inputs: details }};
+  }}
   if (file.name !== expectedName) {{
     return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_MISMATCH', reason: `附件文件名不匹配，期望 ${{expectedName}}，实际 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
   }}
   if (!/\\.zip$/i.test(file.name) || invalidExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))) {{
-    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_INVALID_TYPE', reason: `附件必须是 form_context.json.attachment_zip_path 指向的 zip，实际为 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_INVALID_TYPE', reason: `附件必须是 zip，实际为 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
   }}
   return {{
     ok: true,

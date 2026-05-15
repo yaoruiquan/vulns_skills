@@ -296,16 +296,16 @@ MCP: evaluate_script
 
 ### 4.2 上传原始 CNVD zip
 
-然后执行一次 `take_snapshot`，在快照中找到 `attachment-prepare` 标记过的 file input，再上传 `attachment_zip_path`：
+然后执行一次 `take_snapshot`，在快照中找到 `attachment-prepare` 标记过的 file input，再上传 `browser_upload_path`。`browser_upload_path` 是 `prepare_form_context.py` 从 CNVD 原始 zip 复制出来的 ASCII 路径副本，用于避开 Docker Chrome / CDP 对中文路径上传不稳定的问题：
 
 ```
 MCP: take_snapshot
 MCP: upload_file
   uid: "<带有 CNVD 附件上传目标 aria-label 的文件上传输入框 uid>"
-  filePath: "<attachment_zip_path>"
+  filePath: "<browser_upload_path>"
 ```
 
-这里的 `<attachment_zip_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。
+这里的 `<browser_upload_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。不要自行复制到 `/tmp`，因为 `/tmp` 通常只在 OpenCode 容器内可见，Docker Chrome 容器不可见。
 
 禁止事项：
 
@@ -333,7 +333,8 @@ MCP: evaluate_script
 
 - `ok=true`
 - `code=CNVD_ATTACHMENT_VERIFIED`
-- `fileName` 等于 `attachment_zip_path` 的 basename
+- `fileName` 等于 `browser_upload_path` 的 basename
+- `fileSize > 0`
 - `fileName` 以 `.zip` 结尾
 
 如果返回 `CNVD_ATTACHMENT_FILE_EMPTY`、`CNVD_ATTACHMENT_FILE_MISMATCH`、`CNVD_ATTACHMENT_FILE_INVALID_TYPE` 或任意 `ok=false`，立即写 `output/summary.txt` 并停止。不要继续验证码，不要点击提交。

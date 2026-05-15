@@ -31,7 +31,7 @@
 - 选择完“漏洞类型”后，只继续填写 `description`。
 - `漏洞URL` 固定为 `http://test.com`。
 - 其余缺失必填项统一使用 `无` 或 `见附件`，不要再回 Word 补字段。
-- 附件必须使用 `attachment_zip_path` 指向的 CNVD 原始整包 zip。
+- 附件原始来源必须是 `attachment_zip_path` 指向的 CNVD 原始整包 zip；浏览器上传时必须使用 `browser_upload_path` 指向的 ASCII 路径副本，避免 Docker Chrome / CDP 中文路径上传失败。
 
 ## 验证码
 
