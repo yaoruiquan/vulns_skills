@@ -20,7 +20,7 @@
 | 漏洞URL | form_context.json | detail_url，固定为 `http://test.com` |
 | 临时解决方案 | form_context.json | temp_solution，固定为 `无` |
 | 正式解决方案 | form_context.json | formal_solution，固定为 `见附件` |
-| 漏洞附件 | form_context.json | attachment_zip_path |
+| 漏洞附件 | form_context.json | browser_upload_path |
 | 钉钉下载附件 | form_context.json | submission_zip_path，等同 CNVD 原始整包 zip |
 
 **标题拆分规则**：
@@ -122,6 +122,6 @@ SSRF
 - “是否公开”必须选择“否”。
 - 漏洞描述直接使用 `description` 字段，不要填写 `经恒脑AI代码审计智能体分析：` 前缀。
 - 选择完“漏洞类型”后，漏洞详情页只允许继续填写 `description`、`detail_url`、`temp_solution`、`formal_solution` 和固定默认值；不要再次读取 docx 或临时运行提取脚本。
-- 附件必须上传 `attachment_zip_path` 指向的 CNVD 原始整包 zip；若材料目录里还没有 `CNVD-*.zip`，准备阶段会自动补建。
+- 附件必须上传 `browser_upload_path` 指向的浏览器专用 ASCII zip 副本；若材料目录里还没有 `CNVD-*.zip`，准备阶段会自动补建原始整包 zip 并复制出浏览器上传副本。
 - 准备阶段 `ready` 为 `false` 时不能进入浏览器填表；先修复 `checks` 里失败的项。
 - 提交成功后的钉钉附件下载也使用同一个 CNVD 原始整包 zip；不要上传整个批次目录。

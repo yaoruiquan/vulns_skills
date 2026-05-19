@@ -274,7 +274,7 @@ MCP: fill_form
 先执行 `browser_helpers.attachment_prepare_command`：
 
 ```bash
-python3 scripts/browser_snippets.py attachment-prepare --attachment-path "<attachment_zip_path>"
+python3 scripts/browser_snippets.py attachment-prepare --attachment-path "<browser_upload_path>"
 ```
 
 把输出内容粘贴到 MCP：
@@ -318,7 +318,7 @@ MCP: upload_file
 上传后必须执行 `browser_helpers.attachment_verify_command`：
 
 ```bash
-python3 scripts/browser_snippets.py attachment-verify --attachment-path "<attachment_zip_path>"
+python3 scripts/browser_snippets.py attachment-verify --attachment-path "<browser_upload_path>"
 ```
 
 把输出内容粘贴到 MCP：
@@ -364,7 +364,7 @@ MCP: evaluate_script
 | 漏洞URL | ✓ 已填写 | 固定填写 `http://test.com` |
 | 临时解决方案 | ✓ 已填写 | 默认填写"无" |
 | 正式解决方案 | ✓ 已填写 | 默认填写"见附件" |
-| 漏洞附件 | ✓ 已上传且通过 `attachment_verify_command` | `attachment_zip_path` 指向的 CNVD 原始 zip |
+| 漏洞附件 | ✓ 已上传且通过 `attachment_verify_command` | `browser_upload_path` 指向的浏览器专用 ASCII zip 副本 |
 | 验证码 | 待填写 | OCR识别后填写 |
 
 同时检查：
@@ -372,7 +372,7 @@ MCP: evaluate_script
 - `form_context.json` 的 `ready` 为 `true`。
 - 页面联动顺序必须正确：先选 `form_type_label`，再选 `vuln_type`，之后才开始填文本字段。
 - 页面中“漏洞名称”输入值等于 `title_input`。
-- 上传附件通过 `browser_helpers.attachment_verify_command`，页面可见 file input 中的 `fileName` 等于 `attachment_zip_path` 的 basename。
+- 上传附件通过 `browser_helpers.attachment_verify_command`，页面可见 file input 中的 `fileName` 等于 `browser_upload_path` 的 basename。
 - 提交后页面返回的最终漏洞标题应等于 `title_final_expected`。
 
 推荐在提交前执行一次页面内校验，避免“表单未填写完整”：

@@ -287,7 +287,7 @@ def build_context(args: argparse.Namespace) -> dict:
             "1. 先执行 browser_helpers.select2_command，同步 漏洞所属类型(form_type_label)、漏洞类型(vuln_type)、影响对象类型(object_type_label)",
             "2. Select2 返回 ok=true 后，一次性填写 base_info/vendor_info/detail_info",
             "3. 不要在 fill_form 中重复填写 Select2 下拉框",
-            "4. 最后上传 attachment_zip_path 并处理验证码",
+            "4. 最后上传 browser_upload_path 并处理验证码",
         ],
         "interaction_rules": {
             "snapshot_budget": "除导航、下拉联动确认、提交结果确认外，不要为单个字段重复 take_snapshot。",
