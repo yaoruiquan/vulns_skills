@@ -15,6 +15,7 @@
 
 ## 页面操作
 
+- 登录成功或进入 `/user/reportManage` 后，必须实际导航到 `/flaw/create` 或点击“立即上报漏洞”；如果当前仍在 reportManage 列表页，禁止只 `take_snapshot` 后结束。
 - 进入 `/flaw/create` 后先执行 `browser_helpers.login_guard_command`。
 - 如果返回 Cloudflare 或登录页，先恢复会话，不要继续填表。
 - 登录验证码失败后页面可能清空密码框；每次重试前确认账号、密码、验证码都已重新填写。

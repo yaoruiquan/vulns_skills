@@ -153,6 +153,8 @@ python3 scripts/browser_snippets.py login-guard
 | `isLoginPage=true` | 重新登录；验证码失败后必须重新填密码，因为页面可能清空密码框 |
 | `hasCreateForm=false` | 还没有进入上报表单，继续导航，不要填字段 |
 
+如果登录后停在 `/user/reportManage` 或页面出现“立即上报漏洞”，下一步必须实际导航到 `https://www.cnvd.org.cn/flaw/create` 或点击“立即上报漏洞”，再执行 `login_guard_command`。不要只截取 reportManage 快照后结束；没有进入表单就没有完成浏览器阶段。
+
 如果首次进入 `/flaw/create` 触发 Cloudflare 或登录态失效，优先重启 Chrome 为 `seed-default` 复用日常 profile；`live-default` 只在确认普通 Chrome 已关闭时使用。验证码识别失败后不要复用旧验证码，也不要在密码框被清空时直接再次提交。
 
 ---

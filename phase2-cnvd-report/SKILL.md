@@ -60,7 +60,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 
 1. 检查 `.env`、Chrome 调试端口和 MCP 连接。
 2. 执行 `prepare_form_context.py` 生成 `form_context.json`，确认 `ready=true`。
-3. 先打开 `https://www.cnvd.org.cn/` 通过门户验证码，登录后再导航到 `/flaw/create`，最后执行 `browser_helpers.login_guard_command`。
+3. 先打开 `https://www.cnvd.org.cn/` 通过门户验证码，登录后必须实际导航到 `/flaw/create`（或点击“立即上报漏洞”），最后执行 `browser_helpers.login_guard_command`；如果当前仍在 `/user/reportManage`，禁止只 `take_snapshot` 后结束。
 4. 执行 `browser_helpers.select2_command`，等待 Select2 联动完成。
 5. 只读取 `form_context.json.page_payloads` 填写文本字段，并用 `browser_helpers.is_open_command` 设置“是否公开”为“否”。
 6. 上传 `browser_upload_path` 指向的浏览器专用 ASCII 副本；它由 `prepare_form_context.py` 从 `attachment_zip_path` 原始 CNVD zip 复制生成，内容相同但避免 CDP 中文路径上传失败。上传前必须执行 `browser_helpers.attachment_prepare_command` 定位并标记当前可见附件 input，上传后必须执行 `browser_helpers.attachment_verify_command`，返回 `ok=true` 才能继续。
