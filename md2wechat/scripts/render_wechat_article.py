@@ -26,6 +26,8 @@ FORBIDDEN_OUTPUT = ("<style", "<script", "class=", "contenteditable=", "ProseMir
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 SCREENSHOT_PATTERN = re.compile(r"复现|截图|reproduce|screenshot|poc|图\d+", re.I)
 LOGO_PATTERN = re.compile(r"logo|封面|cover|header|banner", re.I)
+CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,}", re.I)
+TITLE_PREFIX_PATTERN = re.compile(r"^(【[^】]*】)\s*")
 
 
 def load_local_env() -> None:
@@ -138,6 +140,56 @@ def strip_markdown(text: str) -> str:
 
 def escape(text: str) -> str:
     return html.escape(text or "", quote=True)
+
+
+def extract_cve(markdown: str) -> str:
+    match = CVE_PATTERN.search(markdown)
+    return match.group(0).upper() if match else ""
+
+
+def strip_title_prefix(title: str) -> str:
+    return TITLE_PREFIX_PATTERN.sub("", title or "").strip()
+
+
+def title_has_cve(title: str) -> bool:
+    return bool(CVE_PATTERN.search(title or ""))
+
+
+def append_cve_to_title(title: str, cve: str) -> str:
+    title = normalize_space(title)
+    if cve and not title_has_cve(title):
+        title = f"{title}（{cve}）"
+    return title
+
+
+def infer_article_prefix(markdown: str, source: Path, title: str = "") -> str:
+    for candidate in (source.stem, title):
+        match = TITLE_PREFIX_PATTERN.match(candidate or "")
+        if match:
+            return match.group(1)
+
+    for line in markdown.splitlines():
+        match = re.match(r"^\s{0,3}#\s+(.+?)\s*$", line)
+        if not match:
+            continue
+        heading = strip_markdown(match.group(1))
+        prefix_match = TITLE_PREFIX_PATTERN.match(heading)
+        if prefix_match:
+            return prefix_match.group(1)
+
+    if re.search(r"已复现|复现截图|复现结果|复现成功", markdown, re.I):
+        return "【已复现】"
+    for image in source.parent.iterdir() if source.parent.is_dir() else []:
+        if image.is_file() and image.suffix.lower() in IMAGE_EXTENSIONS and SCREENSHOT_PATTERN.search(image.name):
+            return "【已复现】"
+    return "【风险通告】"
+
+
+def format_article_title(markdown: str, source: Path, raw_title: str) -> str:
+    cve = extract_cve(markdown)
+    prefix = infer_article_prefix(markdown, source, raw_title)
+    base_title = append_cve_to_title(strip_title_prefix(raw_title), cve)
+    return f"{prefix}{base_title}" if prefix and not base_title.startswith("【") else base_title
 
 
 def extract_tables(markdown: str) -> list[list[list[str]]]:
@@ -410,17 +462,11 @@ def infer_hazard_description(paragraphs: Iterable[str]) -> str:
 
 
 def extract_title(markdown: str, overview: dict[str, str], source: Path) -> str:
-    src_prefix = ""
     stem = source.stem
-    prefix_match = re.match(r"^(【[^】]*】)", stem)
-    if prefix_match:
-        src_prefix = prefix_match.group(1)
 
     if overview.get("漏洞标题") or overview.get("漏洞名称"):
-        title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
-        if src_prefix and not title.startswith("【"):
-            title = f"{src_prefix}{title}"
-        return title
+        raw_title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
+        return format_article_title(markdown, source, raw_title)
     in_code = False
     for line in markdown.splitlines():
         if line.strip().startswith("```"):
@@ -432,13 +478,9 @@ def extract_title(markdown: str, overview: dict[str, str], source: Path) -> str:
         if match:
             title = strip_markdown(match.group(1))
             if not re.match(r"^[一二三四五六七八九十0-9]+[、.．]", title):
-                if src_prefix and not title.startswith("【"):
-                    title = f"{src_prefix}{title}"
-                return title
-    title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
-    if src_prefix and not title.startswith("【"):
-        title = f"{src_prefix}{title}"
-    return title
+                return format_article_title(markdown, source, title)
+    raw_title = overview.get("漏洞标题") or overview.get("漏洞名称") or stem
+    return format_article_title(markdown, source, raw_title)
 
 
 def table_to_key_values(table: list[list[str]]) -> dict[str, str]:

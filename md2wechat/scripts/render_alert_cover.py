@@ -34,6 +34,13 @@ def strip_markdown(text: str) -> str:
     return normalize_space(text)
 
 
+def append_cve_to_title(title: str, cve: str) -> str:
+    title = normalize_space(title)
+    if cve and not CVE_PATTERN.search(title):
+        title = f"{title}（{cve}）"
+    return title
+
+
 def table_to_key_values(rows: list[list[str]]) -> dict[str, str]:
     result: dict[str, str] = {}
     for row in rows:
@@ -110,6 +117,8 @@ def read_markdown_metadata(markdown_path: Path) -> dict[str, str]:
     # 去除标题前缀标记如 【已复现】、【风险通告】、【漏洞预警】等
     title = re.sub(r"^【[^】]*】\s*", "", title)
     cve_match = CVE_PATTERN.search(text)
+    cve = cve_match.group(0).upper() if cve_match else ""
+    title = append_cve_to_title(title, cve)
     level_match = LEVEL_PATTERN.search(text)
     summary = ""
     for line in text.splitlines():
@@ -119,7 +128,7 @@ def read_markdown_metadata(markdown_path: Path) -> dict[str, str]:
             break
     return {
         "TITLE": title,
-        "CVE": cve_match.group(0).upper() if cve_match else "",
+        "CVE": cve,
         "LEVEL": level_match.group(1) if level_match else "",
         "DATE": date.today().isoformat(),
         "SUMMARY": summary[:120],
