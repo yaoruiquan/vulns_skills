@@ -42,7 +42,7 @@ vim .env
 
 ```
 cd /data/work/jobs/{job_id}
-claude
+claude --dangerously-skip-permissions
 ```
 
 ### 第五步：调用 skill

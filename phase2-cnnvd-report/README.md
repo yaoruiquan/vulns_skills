@@ -43,7 +43,7 @@ vim .env
 
 ```
 cd /Users/yao/.claude/skills/phase2-cnnvd-report
-claude
+claude --dangerously-skip-permissions
 ```
 
 从固定目录启动可隔离 MCP 配置，确保 Chrome 调试端口（9333）和 profile 不冲突。
