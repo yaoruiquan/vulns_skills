@@ -55,7 +55,7 @@ claude
 python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd
 ```
 
-`scripts/captcha_recognize.py` 仍保留在仓库中，但不是主流程默认命令。只有 CNVD 防火墙/WAF 访问验证码会按服务化 prompt 规则先 OCR 最多 3 次，仍失败后再切换前端人工输入；普通登录验证码和提交验证码继续按 skill 脚本 OCR 自动处理。
+`scripts/captcha_recognize.py` 仍保留在仓库中，但不是主流程默认命令。只有 CNVD 防火墙/WAF 访问验证码会先 OCR 最多 3 次，仍失败后再切换人工输入；普通登录验证码和提交验证码继续按 skill 脚本 OCR 自动处理。
 
 ### 第五步：调用 skill
 

@@ -166,15 +166,13 @@ def apply_js(payload: dict) -> str:
       const blob = await resp.blob();
       file = new File([blob], item.name, {{ type: item.mime || blob.type || 'application/octet-stream' }});
     }} catch (error) {{
-      comp.fileList = [{{
-        name: item.name,
-        url: item.url,
-        fileId: Date.now(),
-        uid: Date.now(),
-        status: 'success'
-      }}];
-      if (typeof comp.$emit === 'function') comp.$emit('change', comp.fileList);
-      return {{ kind: item.kind, success: true, mode: 'direct-fileList', warning: error.message, fileList: comp.fileList }};
+      return {{
+        kind: item.kind,
+        success: false,
+        mode: 'fetch-uploaded-file',
+        error: error.message,
+        detail: '已取消 direct fileList fallback；CNNVD 表单校验不认可直接写 fileList，必须通过 handleChange 触发组件上传管道。'
+      }};
     }}
 
     const dt = new DataTransfer();
@@ -190,14 +188,31 @@ def apply_js(payload: dict) -> str:
       input.dispatchEvent(new Event('change', {{ bubbles: true }}));
     }}
 
-    for (let i = 0; i < 40; i++) {{
-      await wait(250);
+    const deadline = Date.now() + Math.max(180000, Math.ceil((item.size || 0) / 1024 / 1024) * 15000);
+    while (Date.now() < deadline) {{
+      await wait(500);
       const list = Array.isArray(comp.fileList) ? comp.fileList : [];
-      if (list.some((f) => f && (f.status === 'success' || f.url))) {{
-        return {{ kind: item.kind, success: true, mode: 'handleChange', fileList: list.map((f) => ({{ name: f.name, url: f.url, status: f.status }})) }};
+      const files = list.map((f) => ({{
+        name: f && f.name,
+        url: f && f.url,
+        status: f && f.status,
+        percentage: f && f.percentage
+      }}));
+      if (list.some((f) => f && f.status === 'fail')) {{
+        return {{ kind: item.kind, success: false, mode: 'handleChange', error: 'component upload failed', fileList: files }};
+      }}
+      if (list.some((f) => f && f.status === 'success' && f.url)) {{
+        return {{ kind: item.kind, success: true, mode: 'handleChange', fileList: files }};
       }}
     }}
-    return {{ kind: item.kind, success: false, error: 'component fileList did not reach success state', fileList: comp.fileList || [] }};
+    return {{
+      kind: item.kind,
+      success: false,
+      mode: 'handleChange',
+      error: 'component fileList did not reach success state before timeout',
+      waitedMs: Math.max(180000, Math.ceil((item.size || 0) / 1024 / 1024) * 15000),
+      fileList: comp.fileList || []
+    }};
   }}
 
   if (uploaded.video) results.push(await applyOne(0, uploaded.video));

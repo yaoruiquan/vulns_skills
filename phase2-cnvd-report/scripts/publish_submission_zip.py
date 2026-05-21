@@ -24,8 +24,8 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = SKILL_ROOT / ".env"
 PLATFORM = "CNVD"
 ZIP_PREFIX = "CNVD"
-DEFAULT_REMOTE_DIR = "/root/msrc-report-downloads/cnvd-submissions"
-DEFAULT_BASE_URL = "http://10.50.10.29:8080/download/msrc/cnvd-submissions"
+DEFAULT_REMOTE_DIR = ""
+DEFAULT_BASE_URL = ""
 DAS_ID_PATTERN = re.compile(r"(DAS-[A-Z]?\d+)")
 PLATFORM_ID_PATTERN = re.compile(r"(CNVD-(?:C-)?\d{4}-\d+)")
 
@@ -196,14 +196,14 @@ def publish(args: argparse.Namespace) -> dict:
     """上传 zip 并返回结果。"""
     load_env()
 
-    if not env_bool("REPORT_UPLOAD_ENABLED", True) and not args.force:
+    if not env_bool("REPORT_UPLOAD_ENABLED", False) and not args.force:
         return {"enabled": False}
 
     zip_path, context = resolve_zip_and_context(args.target, args.vuln_name)
     validate_zip(zip_path, allow_non_prefixed=args.allow_non_prefixed)
 
-    host = args.host or os.environ.get("REPORT_UPLOAD_HOST", "10.50.10.29")
-    user = args.user or os.environ.get("REPORT_UPLOAD_USER", "root")
+    host = args.host or os.environ.get("REPORT_UPLOAD_HOST", "")
+    user = args.user or os.environ.get("REPORT_UPLOAD_USER", "")
     port = str(args.port or os.environ.get("REPORT_UPLOAD_PORT", "22"))
     remote_root = args.remote_dir or os.environ.get("REPORT_UPLOAD_REMOTE_DIR", DEFAULT_REMOTE_DIR)
     base_url = args.base_url or os.environ.get("REPORT_DOWNLOAD_BASE_URL", DEFAULT_BASE_URL)
@@ -292,7 +292,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch", default="", help="远端相对目录；默认 YYYY-MM/DAS-ID")
     parser.add_argument("--batch-month", default="", help="批次月份；默认当前 YYYY-MM")
     parser.add_argument("--host", default="", help="上传服务器；默认读取 REPORT_UPLOAD_HOST")
-    parser.add_argument("--user", default="", help="上传用户；默认读取 REPORT_UPLOAD_USER/root")
+    parser.add_argument("--user", default="", help="上传用户；默认读取 REPORT_UPLOAD_USER")
     parser.add_argument("--port", default="", help="SSH 端口；默认读取 REPORT_UPLOAD_PORT/22")
     parser.add_argument("--remote-dir", default="", help="远程根目录；默认读取 REPORT_UPLOAD_REMOTE_DIR")
     parser.add_argument("--base-url", default="", help="下载 URL 根路径；默认读取 REPORT_DOWNLOAD_BASE_URL")

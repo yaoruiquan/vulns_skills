@@ -34,9 +34,8 @@ def shell_command_for_attachment(command: str, attachment_path: str) -> str:
 def browser_upload_alias_path(attachment_path: str, output_path: str) -> str:
     """Create an ASCII-named browser-readable copy for Chrome DevTools upload.
 
-    Docker Chrome can read /data/work, but CDP upload is unreliable with long
-    non-ASCII paths. Keep the original CNVD zip as source of truth and upload
-    this same-content alias from logs/.
+    CDP upload can be unreliable with long non-ASCII paths. Keep the original
+    CNVD zip as source of truth and upload this same-content alias from logs/.
     """
     source = Path(attachment_path) if attachment_path else None
     if not source or not source.is_file():
@@ -319,7 +318,7 @@ def build_context(args: argparse.Namespace) -> dict:
         },
         "ocr": {
             "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png --preprocess cnvd",
-            "submit_rule": "提交前不要点击刷新；固定执行 browser_helpers.open_captcha_tab_command。若返回 ok=true，打开的是已加载的真实验证码图片，再只用 MCP 对验证码 img 元素截图到 /tmp/captcha.png 并执行 recognize_command 单次本地识别；识别结果返回后用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交。若返回 code=CNVD_CAPTCHA_IMAGE_BROKEN，说明 /common/myCodeNew 触发 CNVD 防火墙或图片加载失败，禁止 OCR 页面占位文字，必须保存防火墙截图到 logs/human-cnvd-firewall.png，截取防火墙页真实验证码 img 元素并调用 captcha_ocr.py --preprocess cnvd 最多尝试 3 次；3 次仍未通过再写 progress warning 并等待前端人工验证码后继续。禁止整页/视口截图用于普通提交验证码，禁止提交包含“看不清/点击更换/存在/二进制/验证码”等页面文字的 OCR 结果。",
+            "submit_rule": "提交前不要点击刷新；固定执行 browser_helpers.open_captcha_tab_command。若返回 ok=true，打开的是已加载的真实验证码图片，再只用 MCP 对验证码 img 元素截图到 /tmp/captcha.png 并执行 recognize_command 单次本地识别；识别结果返回后用 browser_helpers.submit_captcha_command_template 生成脚本直接填入并提交。若返回 code=CNVD_CAPTCHA_IMAGE_BROKEN，说明 /common/myCodeNew 触发 CNVD 防火墙或图片加载失败，禁止 OCR 页面占位文字，必须保存防火墙截图到 logs/human-cnvd-firewall.png，截取防火墙页真实验证码 img 元素并调用 captcha_ocr.py --preprocess cnvd 最多尝试 3 次；3 次仍未通过再等待人工验证码后继续。禁止整页/视口截图用于普通提交验证码，禁止提交包含“看不清/点击更换/存在/二进制/验证码”等页面文字的 OCR 结果。",
         },
         "browser_upload_path": browser_upload_path,
         "submission_zip_path": attachment_path,

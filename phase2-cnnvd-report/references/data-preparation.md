@@ -158,4 +158,4 @@ python3 scripts/publish_submission_zip.py \
 - 不上传整个批次目录。
 - 不需要再手工执行 `zip -r` 或临时创建压缩包。
 - 钉钉消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。
-- 默认远端目录为 `/root/msrc-report-downloads/cnnvd-submissions/YYYY-MM/DAS-ID/`。
+- 远端目录必须通过 `REPORT_UPLOAD_REMOTE_DIR` 或 `--remote-dir` 显式配置。

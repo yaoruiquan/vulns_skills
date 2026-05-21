@@ -86,7 +86,7 @@ MCP: navigate_page
 
 ### 2.2 处理门户验证码
 
-门户防火墙验证码先 OCR，最多 3 次。每次失败后点击“换一张”或刷新验证码，重新截图新验证码，不复用旧图和旧结果；3 次仍未通过再写入 `等待人工防火墙验证码` 进度并等待前端人工输入。
+门户防火墙验证码先 OCR，最多 3 次。每次失败后点击“换一张”或刷新验证码，重新截图新验证码，不复用旧图和旧结果；3 次仍未通过再等待人工输入防火墙验证码。
 
 ```
 MCP: take_snapshot
@@ -294,11 +294,11 @@ MCP: evaluate_script
 - `targetId` 优先为 `flawAttFile1`
 - `uploadRule` 明确要求只上传到带有 `aria-label="CNVD 附件上传目标"` 的控件
 
-如果返回 `ok=false`，立即写 `output/summary.txt` 说明找不到当前可见附件 input，然后停止；不要自己尝试 `querySelector`、`DataTransfer`、`fetch` 或临时构造文件。
+如果返回 `ok=false`，立即记录找不到当前可见附件 input 并停止；不要自己尝试 `querySelector`、`DataTransfer`、`fetch` 或临时构造文件。
 
 ### 4.2 上传原始 CNVD zip
 
-然后执行一次 `take_snapshot`，在快照中找到 `attachment-prepare` 标记过的 file input，再上传 `browser_upload_path`。`browser_upload_path` 是 `prepare_form_context.py` 从 CNVD 原始 zip 复制出来的 ASCII 路径副本，用于避开 Docker Chrome / CDP 对中文路径上传不稳定的问题：
+然后执行一次 `take_snapshot`，在快照中找到 `attachment-prepare` 标记过的 file input，再上传 `browser_upload_path`。`browser_upload_path` 是 `prepare_form_context.py` 从 CNVD 原始 zip 复制出来的 ASCII 路径副本，用于避开 Chrome/CDP 对中文路径上传不稳定的问题：
 
 ```
 MCP: take_snapshot
@@ -307,7 +307,7 @@ MCP: upload_file
   filePath: "<browser_upload_path>"
 ```
 
-这里的 `<browser_upload_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。不要自行复制到 `/tmp`，因为 `/tmp` 通常只在 OpenCode 容器内可见，Docker Chrome 容器不可见。
+这里的 `<browser_upload_path>` 必须来自 `form_context.json`，并且准备阶段 `ready` 必须为 `true`。不要自行临时改路径。
 
 禁止事项：
 
@@ -339,7 +339,7 @@ MCP: evaluate_script
 - `fileSize > 0`
 - `fileName` 以 `.zip` 结尾
 
-如果返回 `CNVD_ATTACHMENT_FILE_EMPTY`、`CNVD_ATTACHMENT_FILE_MISMATCH`、`CNVD_ATTACHMENT_FILE_INVALID_TYPE` 或任意 `ok=false`，立即写 `output/summary.txt` 并停止。不要继续验证码，不要点击提交。
+如果返回 `CNVD_ATTACHMENT_FILE_EMPTY`、`CNVD_ATTACHMENT_FILE_MISMATCH`、`CNVD_ATTACHMENT_FILE_INVALID_TYPE` 或任意 `ok=false`，立即记录失败原因并停止。不要继续验证码，不要点击提交。
 
 ---
 
@@ -443,7 +443,7 @@ https://www.cnvd.org.cn/common/myCodeNew?t=0.8846792108682565
 
 如果返回 `reason=验证码地址不是 /common/myCodeNew`，停止识别，先检查页面选择器，避免打开错误图片。
 
-如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时不要截图表单页占位文字，不要把“看不清/点击更换/存在/二进制”当验证码提交；应切到防火墙验证码处理：保存防火墙页或当前页截图到 `logs/human-cnvd-firewall.png`，截取防火墙页真实验证码 img 元素后用 `captcha_ocr.py --preprocess cnvd` 最多尝试 3 次。3 次仍未通过再写入 `progress.jsonl` 的 `等待人工防火墙验证码` warning，并等待前端人工输入防火墙验证码后继续。
+如果返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时不要截图表单页占位文字，不要把“看不清/点击更换/存在/二进制”当验证码提交；应切到防火墙验证码处理：保存防火墙页或当前页截图到 `logs/human-cnvd-firewall.png`，截取防火墙页真实验证码 img 元素后用 `captcha_ocr.py --preprocess cnvd` 最多尝试 3 次。3 次仍未通过再等待人工输入防火墙验证码后继续。
 
 3. 切到新标签页。新标签页只显示验证码图片，必须只对验证码图片元素截图到 `/tmp/captcha.png`，不要截整个视口，然后识别。若 MCP 工具调用里没有 `uid`，说明你正在截整页/视口，必须停止并重新选择图片元素：
 
@@ -510,7 +510,7 @@ python3 scripts/publish_submission_zip.py \
   --notify
 ```
 
-该脚本只上传 `form_context.json` 中的 `submission_zip_path` / `attachment_zip_path`，即单个漏洞的 CNVD 原始整包 zip；不会上传整个批次目录，也不会重新压缩。默认远端目录为 `/root/msrc-report-downloads/cnvd-submissions/YYYY-MM/DAS-ID/`。
+该脚本只上传 `form_context.json` 中的 `submission_zip_path` / `attachment_zip_path`，即单个漏洞的 CNVD 原始整包 zip；不会上传整个批次目录，也不会重新压缩。远端目录必须通过 `REPORT_UPLOAD_REMOTE_DIR` 或 `--remote-dir` 显式配置。
 
 失败时也应推送失败原因，便于群里跟踪：
 

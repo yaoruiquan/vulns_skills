@@ -32,7 +32,7 @@
 - 选择完“漏洞类型”后，只继续填写 `description`。
 - `漏洞URL` 固定为 `http://test.com`。
 - 其余缺失必填项统一使用 `无` 或 `见附件`，不要再回 Word 补字段。
-- 附件原始来源必须是 `attachment_zip_path` 指向的 CNVD 原始整包 zip；浏览器上传时必须使用 `browser_upload_path` 指向的 ASCII 路径副本，避免 Docker Chrome / CDP 中文路径上传失败。
+- 附件原始来源必须是 `attachment_zip_path` 指向的 CNVD 原始整包 zip；浏览器上传时优先使用 `browser_upload_path` 指向的 ASCII 路径副本，避免 Chrome/CDP 中文路径上传失败。
 
 ## 验证码
 
@@ -41,14 +41,15 @@
 - 提交前不要点击刷新验证码。
 - 默认执行 `browser_helpers.open_captcha_tab_command`，把当前 `/common/myCodeNew?t=...` 打开到新标签页；不要覆盖原表单页。
 - 如果 `open_captcha_tab_command` 返回 `code=CNVD_CAPTCHA_IMAGE_BROKEN`，说明提交验证码图片没有加载成功，通常是 `/common/myCodeNew` 被 CNVD 防火墙验证码拦截。此时禁止 OCR 页面占位文字，必须切到防火墙验证码处理：保存防火墙截图到 `logs/human-cnvd-firewall.png`，截取真实验证码 img 元素到 `/tmp/cnvd-waf-captcha-<attempt>.png`，用 `captcha_ocr.py --preprocess cnvd` 最多尝试 3 次。
-- CNVD 防火墙/WAF 访问验证码（页面出现“本站开启了验证码保护”“请输入验证码，以继续访问”）先 OCR 自动识别，最多 3 次。每次 OCR 前写入 `progress.jsonl` 的 running 事件，label 使用 `防火墙验证码 OCR 尝试 <attempt>/3`。
-- 防火墙验证码 OCR 结果为空、以 `ERROR` 开头、包含“看不清/点击更换/存在/二进制/验证码”等页面文字，或提交后仍停留在验证码保护页/提示验证码过期，都算本次未通过；必须刷新/换一张后重试，不复用旧验证码和旧结果。
-- 只有 3 次 OCR 仍未通过、无法取得真实验证码 img、或页面只剩占位文字时，才写入 `progress.jsonl` 的 warning：`等待人工防火墙验证码`，并等待前端人工输入。
+- CNVD 防火墙/WAF 访问验证码（页面出现“本站开启了验证码保护”“请输入验证码，以继续访问”）先 OCR 自动识别，最多 3 次。
+- 防火墙验证码 OCR 结果为空、以 `ERROR` 开头，或提交后仍停留在验证码保护页/提示验证码过期，都算本次未通过；必须刷新/换一张后重试，不复用旧验证码和旧结果。
+- 只要 OCR 来源确认是真实防火墙验证码 `img` 元素本体，就不要因为识别结果包含中文、`存在`、`验证码` 等词而判定“不是验证码”；CNVD 防火墙验证码可能就是中文词语或短文本，应先提交，再依据页面响应判断成功或重试。
+- 只有 3 次 OCR 仍未通过、无法取得真实验证码 img、或页面只剩占位文字时，才等待人工输入防火墙验证码。
 - 识别命令默认加 `--preprocess cnvd`。
 - 切到验证码图片标签页后，只截验证码图片元素本体到 `/tmp/captcha.png`，再通过 `ocr.recognize_command` 单次本地识别。
 - 禁止截整个视口或整页；CNVD 验证码原图很小，整页截图会导致 ddddocr 识别为空。
 - OCR 结果返回后，用 `browser_helpers.submit_captcha_command_template` 生成脚本，立即填入并提交。
-- 如果提交脚本返回 `INVALID_OCR_TEXT`，说明 OCR 结果是“看不清/点击更换/存在/二进制/验证码”等页面文字，不是真实验证码；不要提交，重新获取真实验证码图片。防火墙验证码累计 3 次仍失败后再进入人工处理。
+- 如果提交脚本返回 `INVALID_OCR_TEXT`，只代表 OCR 结果为空、错误输出或明显来自非验证码截图；不要提交，重新获取真实验证码图片。防火墙验证码累计 3 次仍失败后再进入人工处理。
 - 验证码失败时重新执行 `captcha-tab` 打开新图，不复用旧标签页和旧结果。
 
 ## 批量上报

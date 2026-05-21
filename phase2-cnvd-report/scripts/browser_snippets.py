@@ -148,7 +148,7 @@ def captcha_tab_script() -> str:
       naturalWidth: image.naturalWidth,
       naturalHeight: image.naturalHeight,
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      next: '保存当前页面或 /common/myCodeNew 防火墙页截图到 logs/human-cnvd-firewall.png，并等待前端人工输入防火墙验证码。'
+      next: '保存当前页面或 /common/myCodeNew 防火墙页截图到 logs/human-cnvd-firewall.png，并等待人工输入防火墙验证码。'
     };
   }
   const rawSrc = image.currentSrc || image.src || image.getAttribute('src');
@@ -338,7 +338,7 @@ def attachment_verify_script(attachment_path: str) -> str:
     return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: '当前可见附件 input 没有文件，禁止继续提交。', expectedName, expectedPath, targetId: target.id || '', inputs: details }};
   }}
   if (!file.size || file.size <= 0) {{
-    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: `附件文件大小为 0，通常是 Chrome 容器无法读取上传路径或 CDP 中文路径上传失败。禁止继续提交。`, expectedName, actualName: file.name, fileSize: file.size || 0, expectedPath, targetId: target.id || '', inputs: details }};
+    return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_EMPTY', reason: `附件文件大小为 0，通常是 Chrome 无法读取上传路径或 CDP 中文路径上传失败。禁止继续提交。`, expectedName, actualName: file.name, fileSize: file.size || 0, expectedPath, targetId: target.id || '', inputs: details }};
   }}
   if (file.name !== expectedName) {{
     return {{ ok: false, code: 'CNVD_ATTACHMENT_FILE_MISMATCH', reason: `附件文件名不匹配，期望 ${{expectedName}}，实际 ${{file.name}}。禁止继续提交。`, expectedName, actualName: file.name, expectedPath, targetId: target.id || '', inputs: details }};
@@ -363,12 +363,12 @@ def submit_captcha_script(code: str) -> str:
     """生成填验证码并立即提交脚本。"""
     return as_iife(f"""() => {{
   const code = {js_string(code)};
-  const invalidWords = ['看不清', '点击更换', '存在', '二进制', '验证码'];
-  if (!code || invalidWords.some((word) => String(code).includes(word))) {{
+  const text = String(code || '').trim();
+  if (!text || /^ERROR\\b/i.test(text)) {{
     return {{
       ok: false,
       code: 'INVALID_OCR_TEXT',
-      reason: 'OCR 结果像页面提示文字，不像验证码；禁止提交，需重新获取真实验证码图片或进入防火墙人工处理。',
+      reason: 'OCR 结果为空或为错误输出；需重新获取真实验证码图片或进入防火墙人工处理。',
       value: code
     }};
   }}

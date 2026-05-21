@@ -249,7 +249,8 @@ def build_context(args: argparse.Namespace) -> dict:
     }
     context["ocr"] = {
         "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png",
-        "submit_rule": "如遇验证码，只截验证码图片元素到 /tmp/captcha.png，再执行 recognize_command 单次本地识别；识别后直接填入并提交，不要再 take_snapshot。",
+        "crop_from_screenshot_command": "python3 scripts/crop_captcha_from_screenshot.py --screenshot {logs_dir}/login-page.png --output /tmp/captcha.png --x {x} --y {y} --width {width} --height {height} --viewport-width {viewport_width} --viewport-height {viewport_height}",
+        "submit_rule": "如遇验证码，先保存整页截图，再用 crop_from_screenshot_command 按验证码元素坐标裁剪 /tmp/captcha.png，然后执行 recognize_command 单次本地识别；不要通过 evaluate_script 返回 base64；裁剪结果小于 80x25 视为坐标错误，必须重新定位验证码图片。",
     }
 
     video_status = file_status(context.get("verification_video_path", ""))

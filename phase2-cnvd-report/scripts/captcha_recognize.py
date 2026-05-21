@@ -85,8 +85,7 @@ def recognize_with_fallback(image_path, context="login", preprocess="cnvd",
 def request_manual_input(image_path, context):
     """请求外部人工输入验证码。
 
-    服务化任务没有可交互 stdin。这里输出明确标记并用退出码 2
-    通知上层流程把截图和验证码请求转交给前端处理。
+    输出明确标记并用退出码 2 通知上层流程需要人工输入。
     """
     abs_path = os.path.abspath(image_path)
 
@@ -97,7 +96,7 @@ def request_manual_input(image_path, context):
         "message": "OCR 识别失败，需要人工识别验证码",
         "status": "MANUAL_INPUT_REQUIRED",
         "instructions": [
-            "1. 将图片返回给前端或人工处理通道: {}".format(abs_path),
+            "1. 将图片交给人工处理: {}".format(abs_path),
             "2. 等待人工输入验证码",
             "3. 上层流程拿到验证码后重新填入页面"
         ]
