@@ -37,13 +37,24 @@ def cell_paragraph_text(cell) -> str:
     return "\n".join(paragraph.text for paragraph in cell.paragraphs)
 
 
-def set_cell_text_plain(cell, text: str) -> None:
+def _strip_cell_children(cell) -> None:
+    """Remove all <w:p> and <w:tbl> children from a table cell."""
     tc = cell._tc
     for item in list(tc.iterchildren()):
-        if item.tag.endswith("p"):
+        if item.tag.endswith(("p", "tbl")):
             tc.remove(item)
+
+
+def _cell_has_tables(cell) -> bool:
+    """Check if a table cell contains embedded tables."""
+    tc = cell._tc
+    return any(child.tag.endswith("tbl") for child in tc.iterchildren())
+
+
+def set_cell_text_plain(cell, text: str) -> None:
+    _strip_cell_children(cell)
     new_p = OxmlElement("w:p")
-    tc.append(new_p)
+    cell._tc.append(new_p)
     new_r = OxmlElement("w:r")
     new_p.append(new_r)
     new_t = OxmlElement("w:t")
@@ -130,7 +141,7 @@ def modify_cnvd_report(doc_path: Path) -> Tuple[bool, str]:
                 changes.append("后缀")
             modified_fields.append(f"漏洞分析({'+'.join(changes)})" if changes else "漏洞分析(已存在)")
         elif field == "漏洞验证过程":
-            if text.strip() == VF_REPLACE_VERIFICATION:
+            if text.strip() == VF_REPLACE_VERIFICATION and not _cell_has_tables(target):
                 modified_fields.append("漏洞验证过程(已存在)")
             else:
                 set_cell_text_plain(target, VF_REPLACE_VERIFICATION)
