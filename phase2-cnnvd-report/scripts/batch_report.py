@@ -292,6 +292,84 @@ def run_json(command: list[str]) -> dict:
         raise SystemExit(f"命令未返回 JSON: {' '.join(command)}\n{result.stdout}\n{result.stderr}") from exc
 
 
+def read_context_file(path_value: str) -> dict:
+    path = Path(path_value).expanduser()
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def file_size_mb(path: Path) -> float:
+    return round(path.stat().st_size / 1024 / 1024, 2) if path.is_file() else 0
+
+
+def merge_publish_result(state: dict, item: dict, result: dict) -> dict:
+    context = read_context_file(item.get("context_file") or context_path_for(state, item))
+    zip_path_value = (
+        result.get("zip_path")
+        or context.get("submission_zip_path")
+        or context.get("attachment_zip_path")
+        or ""
+    )
+    zip_path = Path(zip_path_value).expanduser() if zip_path_value else None
+    fallback = {
+        "enabled": result.get("enabled", False),
+        "platform": result.get("platform") or state.get("platform"),
+        "das_id": result.get("das_id") or item.get("das_id") or context.get("das_id") or "",
+        "platform_id": result.get("platform_id") or item.get("platform_id") or context.get("platform_id") or "",
+        "vuln_name": result.get("vuln_name") or context.get("title_final_expected") or context.get("title") or item.get("title") or "",
+        "zip_path": str(zip_path) if zip_path else "",
+        "zip_name": result.get("zip_name") or (zip_path.name if zip_path else ""),
+        "zip_size_mb": result.get("zip_size_mb") or (file_size_mb(zip_path) if zip_path else 0),
+        "remote_dir": result.get("remote_dir", ""),
+        "download_url": result.get("download_url", ""),
+    }
+    merged = dict(result)
+    for key, value in fallback.items():
+        if not merged.get(key):
+            merged[key] = value
+    return merged
+
+
+def summary_command(state: dict, item: dict, result: dict) -> list[str]:
+    """生成同步漏洞汇总表的命令。"""
+    context = read_context_file(item.get("context_file") or context_path_for(state, item))
+    platform = state.get("platform") or PLATFORM
+    platform_id = result.get("platform_id") or item.get("platform_id") or context.get("platform_id") or ""
+    submitted_at = item.get("submitted_at") or now()
+    return [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "update_summary.py"),
+        "--title",
+        result.get("vuln_name") or context.get("title_final_expected") or context.get("title") or item.get("title") or "",
+        "--vendor",
+        context.get("unit_name") or context.get("affected_vendor") or context.get("vendor") or "",
+        "--das-id",
+        result.get("das_id") or item.get("das_id") or context.get("das_id") or "",
+        "--submitter",
+        context.get("discoverer_name") or context.get("submitter") or "",
+        "--platform",
+        platform,
+        "--platform-id",
+        platform_id,
+        "--date",
+        submitted_at.split("T", 1)[0],
+    ]
+
+
+def sync_summary_table(state: dict, submitted: list[dict], results: list[dict], dry_run: bool) -> list[list[str]]:
+    """把已提交条目同步到 SUMMARY_TABLE_PATH 指定的汇总表。"""
+    commands = [summary_command(state, item, result) for item, result in zip(submitted, results)]
+    if dry_run:
+        return commands
+    for command in commands:
+        subprocess.run(command, check=True)
+    return commands
+
+
 def publish_item(state: dict, item: dict, dry_run: bool) -> dict:
     context_file = Path(item.get("context_file") or context_path_for(state, item)).expanduser()
     if not context_file.is_file():
@@ -322,10 +400,12 @@ def build_notify_text(state: dict, results: list[dict]) -> tuple[str, list[str]]
     links = []
 
     name_lines = []
+    das_lines = []
     id_lines = []
     attach_lines = []
     for index, result in enumerate(results, start=1):
         name_lines.append(f"{index}. {result.get('vuln_name', '')}")
+        das_lines.append(f"{index}. {result.get('das_id', '')}")
         id_lines.append(f"{index}. {result.get('platform_id', '未记录')}")
         zip_name = result.get('zip_name', '')
         zip_size = result.get('zip_size_mb', 0)
@@ -338,6 +418,9 @@ def build_notify_text(state: dict, results: list[dict]) -> tuple[str, list[str]]
         "",
         "漏洞名称：",
         *name_lines,
+        "",
+        "DAS-ID：",
+        *das_lines,
         "",
         "CNNVD 编号：",
         *id_lines,
@@ -359,10 +442,12 @@ def command_notify(args: argparse.Namespace) -> int:
     results = []
     for item in submitted:
         result = publish_item(state, item, args.dry_run)
+        result = merge_publish_result(state, item, result)
         item["publish_result"] = result
         results.append(result)
 
     text, links = build_notify_text(state, results)
+    summary_commands = sync_summary_table(state, submitted, results, dry_run=True)
     notify_script = SKILL_ROOT / "scripts" / "dingtalk_notify.py"
     command = [
         sys.executable,
@@ -384,15 +469,18 @@ def command_notify(args: argparse.Namespace) -> int:
             "dry_run": True,
             "publish_results": results,
             "notify_command": command,
+            "summary_commands": summary_commands,
             "text": text,
             "links": links,
         }, ensure_ascii=False, indent=2))
         return 0
 
     subprocess.run(command, check=True)
+    sync_summary_table(state, submitted, results, dry_run=False)
     state["final_notified"] = True
+    state["summary_synced_at"] = now()
     write_state(state)
-    print(json.dumps({"notified": True, "summary": summarize_state(state)}, ensure_ascii=False, indent=2))
+    print(json.dumps({"notified": True, "summary_synced": True, "summary": summarize_state(state)}, ensure_ascii=False, indent=2))
     return 0
 
 

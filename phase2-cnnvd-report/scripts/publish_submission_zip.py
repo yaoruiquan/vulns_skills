@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from compress_zip import ensure_submission_zip
+from compress_zip import ensure_submission_zip, zip_has_nested_zip
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -121,6 +121,10 @@ def resolve_zip_from_context(context: dict) -> str:
         or find_platform_zip(context.get("folder_path", ""))
     )
     if zip_path:
+        if zip_has_nested_zip(Path(zip_path).expanduser()):
+            folder_path = context.get("folder_path", "")
+            if folder_path:
+                return ensure_submission_zip(folder_path, output_path=zip_path)
         return zip_path
     return ensure_submission_zip(context.get("folder_path", ""))
 
@@ -192,14 +196,54 @@ def build_download_url(base_url: str, relative_dir: str, filename: str) -> str:
     return "/".join([base_url.rstrip("/"), *encoded])
 
 
+def build_result(
+    args: argparse.Namespace,
+    zip_path: Path,
+    context: dict,
+    *,
+    enabled: bool,
+    remote_dir: str = "",
+    download_url: str = "",
+    skipped_reason: str = "",
+) -> dict:
+    """汇总通知需要的字段；上传关闭时也返回元数据。"""
+    das_id = args.das_id or context.get("das_id") or extract_das_id(zip_path.name, str(zip_path.parent)) or "unknown"
+    vuln_name = args.vuln_name or context.get("title_final_expected") or context.get("title") or zip_path.stem
+    platform_id = args.platform_id or context.get("platform_id") or extract_platform_id(zip_path.name)
+    result = {
+        "enabled": enabled,
+        "platform": PLATFORM,
+        "das_id": das_id,
+        "platform_id": platform_id,
+        "vuln_name": vuln_name,
+        "vendor": context.get("unit_name") or context.get("affected_vendor") or context.get("vendor") or "",
+        "submitter": context.get("discoverer_name") or context.get("submitter") or "",
+        "zip_path": str(zip_path),
+        "zip_name": zip_path.name,
+        "zip_size_mb": file_size_mb(zip_path) if zip_path.is_file() else 0,
+        "remote_dir": remote_dir,
+        "download_url": download_url,
+    }
+    if skipped_reason:
+        result["skipped_reason"] = skipped_reason
+    return result
+
+
 def publish(args: argparse.Namespace) -> dict:
     """上传 zip 并返回结果。"""
     load_env()
 
-    if not env_bool("REPORT_UPLOAD_ENABLED", False) and not args.force:
-        return {"enabled": False}
-
     zip_path, context = resolve_zip_and_context(args.target, args.vuln_name)
+
+    if not env_bool("REPORT_UPLOAD_ENABLED", False) and not args.force:
+        return build_result(
+            args,
+            zip_path,
+            context,
+            enabled=False,
+            skipped_reason="REPORT_UPLOAD_ENABLED=false",
+        )
+
     validate_zip(zip_path, allow_non_prefixed=args.allow_non_prefixed)
 
     host = args.host or os.environ.get("REPORT_UPLOAD_HOST", "")
@@ -213,8 +257,6 @@ def publish(args: argparse.Namespace) -> dict:
         raise SystemExit("缺少上传配置：REPORT_UPLOAD_HOST、REPORT_UPLOAD_REMOTE_DIR 或 REPORT_DOWNLOAD_BASE_URL")
 
     das_id = args.das_id or context.get("das_id") or extract_das_id(zip_path.name, str(zip_path.parent)) or "unknown"
-    vuln_name = args.vuln_name or context.get("title_final_expected") or context.get("title") or zip_path.stem
-    platform_id = args.platform_id or extract_platform_id(zip_path.name)
     month = args.batch_month or datetime.now().strftime("%Y-%m")
     relative_dir = args.batch or f"{safe_name(month, 'batch')}/{safe_name(das_id, 'unknown')}"
     remote_batch_dir = f"{remote_root.rstrip('/')}/{relative_dir.strip('/')}"
@@ -233,18 +275,30 @@ def publish(args: argparse.Namespace) -> dict:
     )
 
     download_url = build_download_url(base_url, relative_dir, zip_path.name)
-    return {
-        "enabled": True,
-        "platform": PLATFORM,
-        "das_id": das_id,
-        "platform_id": platform_id,
-        "vuln_name": vuln_name,
-        "zip_path": str(zip_path),
-        "zip_name": zip_path.name,
-        "zip_size_mb": file_size_mb(zip_path),
-        "remote_dir": remote_batch_dir,
-        "download_url": download_url,
-    }
+    return build_result(args, zip_path, context, enabled=True, remote_dir=remote_batch_dir, download_url=download_url)
+
+
+def sync_summary(result: dict, args: argparse.Namespace) -> None:
+    """钉钉通知后同步本地漏洞汇总表。"""
+    command = [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "update_summary.py"),
+        "--title",
+        result.get("vuln_name", ""),
+        "--vendor",
+        result.get("vendor", ""),
+        "--das-id",
+        result.get("das_id", ""),
+        "--submitter",
+        result.get("submitter", ""),
+        "--platform",
+        PLATFORM,
+        "--platform-id",
+        result.get("platform_id", ""),
+        "--date",
+        datetime.now().strftime("%Y-%m-%d"),
+    ]
+    run_command(command, dry_run=args.dry_run)
 
 
 def notify(result: dict, args: argparse.Namespace) -> None:
@@ -281,6 +335,7 @@ def notify(result: dict, args: argparse.Namespace) -> None:
     if args.at_all:
         command.append("--at-all")
     run_command(command, dry_run=args.dry_run)
+    sync_summary(result, args)
 
 
 def parse_args() -> argparse.Namespace:

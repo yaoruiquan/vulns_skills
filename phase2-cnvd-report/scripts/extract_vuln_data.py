@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from compress_zip import ensure_submission_zip
+from compress_zip import ensure_submission_zip, zip_has_nested_zip
 
 # 加载 .env 配置
 SKILL_DIR = Path(__file__).parent.parent
@@ -78,11 +78,14 @@ def find_attachment_zip_path(platform_folder: str, platform: str) -> str:
     if not zip_files:
         return ensure_submission_zip(platform_folder, prefix=platform_upper)
 
-    return str(max(zip_files, key=lambda path: path.stat().st_size))
+    selected = max(zip_files, key=lambda path: path.stat().st_size)
+    if zip_has_nested_zip(selected):
+        return ensure_submission_zip(platform_folder, output_path=str(selected), prefix=platform_upper)
+    return str(selected)
 
 
 def clean_cnvd_description(description: str) -> str:
-    """清理 CNVD 漏洞描述中不应填写到表单的固定分析前缀"""
+    """清理 CNVD 漏洞描述中不应填写到表单的固定分析前缀。"""
     if not description:
         return ""
 
@@ -94,6 +97,46 @@ def clean_cnvd_description(description: str) -> str:
         count=1,
     )
     return cleaned.strip()
+
+
+def waf_safe_cnvd_description(description: str, title: str, vuln_type: str) -> str:
+    """生成 CNVD 表单可提交的低敏漏洞描述，避免 WAF 拦截技术细节。"""
+    cleaned = clean_cnvd_description(description)
+    risk_terms = (
+        "SqlValidator",
+        "sqlvalidator",
+        "堆叠查询",
+        "SQL注入",
+        "数据库",
+        "查询语句",
+        "注入",
+        "jdbcTemplate.update",
+        "jdbcTemplate",
+        "select ",
+        "update ",
+        "insert ",
+        "delete ",
+        "drop ",
+        "union ",
+        "sleep(",
+        "benchmark(",
+        "' or ",
+        "\" or ",
+        "--",
+        "/*",
+        "*/",
+    )
+    if not cleaned:
+        return ""
+    lower = cleaned.lower()
+    if any(term.lower() in lower for term in risk_terms) or "sql" in (vuln_type or "").lower() or "注入" in (vuln_type or "") or len(cleaned) > 220:
+        product = (title or "相关系统").split("存在", 1)[0].strip() or "相关系统"
+        kind = "安全"
+        return (
+            f"{product}存在{kind}风险。攻击者可通过构造异常输入触发漏洞，"
+            "可能影响系统数据安全或业务稳定性。具体验证过程、影响范围和处置建议见附件。"
+        )
+    return cleaned
 
 
 def first_non_empty(fields: Dict[str, str], *keys: str) -> str:
@@ -240,7 +283,7 @@ def extract_cnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR) -> Dict[str
 
     fields = extract_fields_from_docx(doc_path)
     folder_path = os.path.dirname(doc_path)
-    description = clean_cnvd_description(fields.get("漏洞描述", ""))
+    description = waf_safe_cnvd_description(fields.get("漏洞描述", ""), fields.get("漏洞名称", ""), fields.get("漏洞类型", ""))
     attachment_zip_path = find_attachment_zip_path(folder_path, "CNVD")
 
     return {

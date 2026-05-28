@@ -29,6 +29,8 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 - `技术支持`：使用 `page_payloads.page2_text.technical_support`。
 - `技术支持联系电话`：使用 `page_payloads.page2_text.contact`。
 
+手机号不只校验 11 位，还校验号段。准备脚本会把不合规号码（例如 `16880230001`）替换为平台可接受的默认号码；浏览器阶段不要再手工改回原 Word 号码。
+
 `漏洞描述或简介` 页面限制最多 255 个字符。只填写 `description`，不要填写 `description_full`。
 
 ### 第 3 页：漏洞验证
@@ -58,7 +60,7 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 | 漏洞描述或简介 | extract_vuln_data | description | 使用 Word“漏洞简介”，已清理固定前缀，最多 255 字 |
 | 漏洞描述原文 | extract_vuln_data | description_full | 只作参考，不直接填表 |
 | 技术支持 | extract_vuln_data | technical_support | 默认杭州安恒信息技术股份有限公司 |
-| 技术支持联系电话 | extract_vuln_data | contact | 或默认 15700082275 |
+| 技术支持联系电话 | extract_vuln_data | contact | 或默认 17557289379 |
 | 验证过程原文 | extract_vuln_data | verification_source | 只作为总结输入，不直接填表 |
 | 验证过程 | 数据准备总结 | verification | 根据 `verification_source` 总结压缩为一段文字，不带图片 |
 | 验证录像 | extract_vuln_data | verification_video_path | 优先取 `exp验证视频`，其次取 `poc验证视频`、`验证视频`、`视频`、`video` |
@@ -86,7 +88,7 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
   "verification": "数据准备阶段总结压缩后的单段验证过程文本...",
   "verification_video_path": "/path/to/exp验证视频/demo.mp4",
   "poc_file_path": "/path/to/exp/poc.zip",
-  "contact": "15700082275",
+  "contact": "17557289379",
   "folder_path": "/Users/yao/LLM/vulns/date/DAS-T105970-xxx/CNNVD-xxx",
   "docx_path": "/Users/yao/LLM/vulns/date/DAS-T105970-xxx/CNNVD-xxx/xxx.docx"
 }
@@ -109,4 +111,22 @@ CNNVD 页面只填写带 danger/红色必填标记的字段，避免每个下拉
 - 优先用 `evaluate_script` 直接点击 Element UI 下拉项，避免每个选项都用 `take_snapshot` 查 uid。
 - 每页字段准备好后尽量一次性 `fill_form`，不要填完一个字段就再确认一次页面状态。
 - 级联下拉选择最终节点时，点击选项前面的圆圈/单选按钮，不要只点击文字。
+- 受影响实体分类必须点击平台 DOM 选项；不要直接写 Vue model 值，避免 `"30"` 这类值映射到错误中文选项。
 - 如果选择某项后动态出现新的非必填字段，不填写；如果动态出现必填字段，能选择“其他”就选“其他”，文本框统一填“见附件”。
+
+## 七、Vue 模型同步
+
+CNNVD 页面中文标签和 Vue model 字段名不一致。提交前执行 `form_context.json.browser_helpers.sync_form_model_command`，它会同步：
+
+- `vulName`：漏洞名称
+- `affectedVendor`：厂商名称
+- `affectedEntityName`：受影响实体
+- `affectedEntityVersion`：版本
+- `affectedEntityDesc`：描述
+- `hazardLevel`：自评级
+- `vulDesc`：漏洞描述
+- `supporter`：技术支持
+- `supporterPhone`：联系电话
+- `verifyProcess`：验证过程
+
+TinyMCE/iframe 内容必须和 `formModel.verifyProcess` 同步；只改 iframe body 会导致提交校验提示“请输入验证过程”。

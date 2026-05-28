@@ -7,10 +7,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 from datetime import datetime
 from pathlib import Path
 
-from compress_zip import ensure_submission_zip
+from compress_zip import ensure_submission_zip, zip_has_nested_zip
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_cnnvd_data, resolve_target
 
 
@@ -151,7 +152,10 @@ def find_submission_zip_path(folder_path: str) -> str:
                 candidates.append(path)
     if not candidates:
         return ""
-    return str(max(candidates, key=lambda item: item.stat().st_size))
+    selected = max(candidates, key=lambda item: item.stat().st_size)
+    if zip_has_nested_zip(selected):
+        return ensure_submission_zip(str(folder), output_path=str(selected), prefix="CNNVD")
+    return str(selected)
 
 
 def resolve_vuln_type_path(vuln_type: str) -> list[str]:
@@ -242,10 +246,29 @@ def build_context(args: argparse.Namespace) -> dict:
             "poc_file_path": context.get("poc_file_path", ""),
         },
     }
+    context["vue_form_model_fields"] = {
+        "vulName": context.get("title", ""),
+        "affectedVendor": context.get("unit_name", ""),
+        "affectedEntityName": context.get("affected_product", ""),
+        "affectedEntityVersion": context.get("version", ""),
+        "affectedEntityDesc": clip_text(entity_description, 120),
+        "hazardLevel": context.get("risk_level", ""),
+        "vulDesc": clip_text(context.get("description", ""), 255),
+        "supporter": context.get("technical_support", ""),
+        "supporterPhone": context.get("contact", ""),
+        "verifyProcess": clip_text(verification, 300),
+    }
+    context["browser_helpers"] = {
+        "probe_form_model_command": "python3 scripts/browser_snippets.py probe-form-model",
+        "sync_form_model_command": "python3 scripts/browser_snippets.py sync-form-model --form-context {}".format(
+            shlex.quote(str(Path(args.output).expanduser() if args.output else default_context_output(context)))
+        ),
+    }
     context["interaction_rules"] = {
         "snapshot_budget": "每页仅在进入页面、下拉联动确认、提交结果确认时 take_snapshot；不要为单个字段反复截图。",
         "fill_rule": "每页按 page_payloads 一次性填写，不要在第 2 页和第 3 页重新提取或总结。",
-        "dropdown_rule": "优先按 dropdown_plan 直接选择；级联下拉点击最终叶子项前面的圆圈/单选按钮，不要按 Escape。",
+        "dropdown_rule": "优先按 dropdown_plan 直接选择；级联下拉点击最终叶子项前面的圆圈/单选按钮，不要按 Escape；受影响实体分类必须点击 DOM 选项，不要只写 Vue 值。",
+        "vue_model_rule": "提交前执行 browser_helpers.sync_form_model_command；TinyMCE/iframe 写入后必须同步 form.__vue__.formModel.verifyProcess。",
     }
     context["ocr"] = {
         "recognize_command": "python3 scripts/captcha_ocr.py /tmp/captcha.png",
@@ -255,6 +278,7 @@ def build_context(args: argparse.Namespace) -> dict:
 
     video_status = file_status(context.get("verification_video_path", ""))
     poc_status = file_status(context.get("poc_file_path", ""))
+    video_over_limit = video_status["exists"] and video_status["size_mb"] > 50
     submission_zip_path = find_submission_zip_path(context.get("folder_path", ""))
     if not submission_zip_path:
         submission_zip_path = ensure_submission_zip(context.get("folder_path", ""))
@@ -271,6 +295,15 @@ def build_context(args: argparse.Namespace) -> dict:
     context["file_checks"] = {
         "verification_video": video_status,
         "poc_file": poc_status,
+    }
+    context["video_compression"] = {
+        "required": video_over_limit,
+        "max_mb": 50,
+        "target_mb": 48,
+        "command": "python3 scripts/compress_cnnvd_video.py {} --json".format(
+            shlex.quote(context.get("verification_video_path", ""))
+        ) if context.get("verification_video_path") else "",
+        "upload_rule": "upload_cnnvd_attachments.py 默认会在视频超过 50MB 时自动压缩到 48MB 目标后再上传。",
     }
     context["submission_zip_path"] = submission_zip_path
     context["submission_zip_status"] = submission_zip_status

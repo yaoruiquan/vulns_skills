@@ -155,6 +155,7 @@ python3 scripts/publish_submission_zip.py \
 规则：
 
 - 只上传单个漏洞的 `CNNVD-*.zip` 原始整包；如果材料目录里还没有该 zip，`prepare_form_context.py` / `publish_submission_zip.py` 会自动补建。
+- 自动补建整包 zip 时会排除源目录内已有的 `.zip` 文件；如果旧整包 zip 内已嵌套 zip，发布脚本会重建同名整包。
 - 不上传整个批次目录。
 - 不需要再手工执行 `zip -r` 或临时创建压缩包。
 - 钉钉消息必须包含漏洞名称、`DAS-ID`、`CNNVD 编号` 和附件下载链接。

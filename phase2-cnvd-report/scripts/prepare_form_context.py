@@ -31,6 +31,13 @@ def shell_command_for_attachment(command: str, attachment_path: str) -> str:
     )
 
 
+def shell_command_for_hidden_sync(title: str, description: str) -> str:
+    return "python3 scripts/browser_snippets.py sync-hidden-fields --title {} --description {}".format(
+        shlex.quote(title),
+        shlex.quote(description),
+    )
+
+
 def browser_upload_alias_path(attachment_path: str, output_path: str) -> str:
     """Create an ASCII-named browser-readable copy for Chrome DevTools upload.
 
@@ -48,7 +55,7 @@ def browser_upload_alias_path(attachment_path: str, output_path: str) -> str:
         job_root = output.parent
     alias_dir = job_root / "logs" / "browser-upload"
     alias_dir.mkdir(parents=True, exist_ok=True)
-    alias = alias_dir / "cnvd-attachment-upload.zip"
+    alias = alias_dir / source.name
     if not alias.exists() or alias.stat().st_size != source.stat().st_size:
         shutil.copy2(source, alias)
     return str(alias)
@@ -180,12 +187,12 @@ def build_context(args: argparse.Namespace) -> dict:
         data = extract_cnvd_data(das_id, resolved_data_dir)
         if data.get("error"):
             # 允许直接传 docx/CNVD 目录时绕过 data_dir 扫描失败。
-            from extract_vuln_data import clean_cnvd_description, find_attachment_zip_path, first_non_empty, map_cnvd_vuln_type, map_soft_style
+            from extract_vuln_data import find_attachment_zip_path, first_non_empty, map_cnvd_vuln_type, map_soft_style, waf_safe_cnvd_description
 
             data = {
                 "das_id": das_id,
                 "title": fields.get("漏洞名称", ""),
-                "description": clean_cnvd_description(fields.get("漏洞描述", "")),
+                "description": waf_safe_cnvd_description(fields.get("漏洞描述", ""), fields.get("漏洞名称", ""), fields.get("漏洞类型", "")),
                 "vuln_type": map_cnvd_vuln_type(fields.get("漏洞类型", "")),
                 "vuln_type_raw": fields.get("漏洞类型", ""),
                 "url": fields.get("漏洞URL", ""),
@@ -311,6 +318,13 @@ def build_context(args: argparse.Namespace) -> dict:
             "attachment_verify_command": shell_command_for_attachment(
                 "attachment-verify",
                 browser_upload_path,
+            ),
+            "sync_hidden_fields_command": shell_command_for_hidden_sync(
+                title_parts["title_input"],
+                data.get("description", ""),
+            ),
+            "waf_guard_command": "python3 scripts/browser_snippets.py waf-guard --expected-soft-style {}".format(
+                shlex.quote(str(data.get("soft_style_id", "")))
             ),
             "open_captcha_tab_command": "python3 scripts/browser_snippets.py captcha-tab",
             "captcha_preview_command": "python3 scripts/browser_snippets.py captcha-tab",

@@ -19,6 +19,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from compress_cnnvd_video import DEFAULT_MAX_MB, DEFAULT_TARGET_MB, compress_video
+
 
 DEFAULT_ENDPOINT = "https://www.cnnvd.org.cn/web/compatibilityProduct/importImplementImg"
 
@@ -66,7 +68,7 @@ def multipart_body(file_path: Path, file_field: str, boundary: str) -> bytes:
     return b"".join(parts)
 
 
-def request_upload(endpoint: str, token: str, file_path: Path, file_field: str) -> dict:
+def request_upload(endpoint: str, token: str, file_path: Path, file_field: str, timeout: int) -> dict:
     boundary = "----OpenCodeCNNVD" + secrets.token_hex(12)
     body = multipart_body(file_path, file_field, boundary)
     req = urllib.request.Request(
@@ -84,7 +86,7 @@ def request_upload(endpoint: str, token: str, file_path: Path, file_field: str) 
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             status = resp.getcode()
     except urllib.error.HTTPError as exc:
@@ -116,12 +118,12 @@ def extract_uploaded_url(response: dict) -> str:
     return ""
 
 
-def upload_one(endpoint: str, token: str, kind: str, path_text: str, file_field: str) -> dict:
+def upload_one(endpoint: str, token: str, kind: str, path_text: str, file_field: str, timeout: int) -> dict:
     file_path = Path(path_text)
     if not file_path.exists() or not file_path.is_file():
         raise FileNotFoundError(f"{kind} file not found: {file_path}")
     started = time.time()
-    upload = request_upload(endpoint, token, file_path, file_field)
+    upload = request_upload(endpoint, token, file_path, file_field, timeout)
     uploaded_url = extract_uploaded_url(upload["response"])
     if not uploaded_url:
         raise RuntimeError(f"{kind} upload response did not include a server file path")
@@ -171,21 +173,30 @@ def apply_js(payload: dict) -> str:
         success: false,
         mode: 'fetch-uploaded-file',
         error: error.message,
-        detail: '已取消 direct fileList fallback；CNNVD 表单校验不认可直接写 fileList，必须通过 handleChange 触发组件上传管道。'
+        detail: '已取消 direct fileList fallback；CNNVD 表单校验不认可直接写 fileList，视频必须通过原生 input change，PoC 通过 handleChange/input change 触发组件上传管道。'
       }};
     }}
 
     const dt = new DataTransfer();
     dt.items.add(file);
-    const event = {{ target: {{ files: dt.files }}, preventDefault() {{}} }};
+    let mode = '';
 
-    if (typeof comp.handleChange === 'function') {{
+    if (item.kind === 'video') {{
+      const input = el.querySelector('input[type="file"]');
+      if (!input) return {{ kind: item.kind, success: false, error: 'file input not found for video input-change mode' }};
+      Object.defineProperty(input, 'files', {{ value: dt.files, configurable: true }});
+      input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      mode = 'input-change';
+    }} else if (typeof comp.handleChange === 'function') {{
+      const event = {{ target: {{ files: dt.files }}, preventDefault() {{}} }};
       comp.handleChange(event);
+      mode = 'handleChange';
     }} else {{
       const input = el.querySelector('input[type="file"]');
       if (!input) return {{ kind: item.kind, success: false, error: 'file input not found' }};
       Object.defineProperty(input, 'files', {{ value: dt.files, configurable: true }});
       input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      mode = 'input-change';
     }}
 
     const deadline = Date.now() + Math.max(180000, Math.ceil((item.size || 0) / 1024 / 1024) * 15000);
@@ -199,16 +210,16 @@ def apply_js(payload: dict) -> str:
         percentage: f && f.percentage
       }}));
       if (list.some((f) => f && f.status === 'fail')) {{
-        return {{ kind: item.kind, success: false, mode: 'handleChange', error: 'component upload failed', fileList: files }};
+        return {{ kind: item.kind, success: false, mode, error: 'component upload failed', fileList: files }};
       }}
       if (list.some((f) => f && f.status === 'success' && f.url)) {{
-        return {{ kind: item.kind, success: true, mode: 'handleChange', fileList: files }};
+        return {{ kind: item.kind, success: true, mode, fileList: files }};
       }}
     }}
     return {{
       kind: item.kind,
       success: false,
-      mode: 'handleChange',
+      mode,
       error: 'component fileList did not reach success state before timeout',
       waitedMs: Math.max(180000, Math.ceil((item.size || 0) / 1024 / 1024) * 15000),
       fileList: comp.fileList || []
@@ -227,6 +238,11 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Path to write uploaded attachment JSON")
     parser.add_argument("--apply-js", help="Optional path to write browser evaluate_script function")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    parser.add_argument("--upload-timeout", type=int, default=300, help="单个附件上传超时秒数，默认 300")
+    parser.add_argument("--video-max-mb", type=float, default=DEFAULT_MAX_MB, help="验证视频平台限制，默认 50")
+    parser.add_argument("--video-target-mb", type=float, default=DEFAULT_TARGET_MB, help="验证视频压缩目标，默认 48")
+    parser.add_argument("--compressed-video-dir", default="", help="压缩视频输出目录；默认写到原视频目录 cnnvd-compressed/")
+    parser.add_argument("--no-compress-video", action="store_true", help="禁用超过限制时自动压缩视频")
     parser.add_argument("--token-file")
     parser.add_argument("--token-stdin", action="store_true")
     parser.add_argument("--token-env")
@@ -238,10 +254,21 @@ def main() -> int:
 
     form_context = load_json(Path(args.form_context))
     uploads = context_uploads(form_context)
+    video_path = uploads["video"]
+    video_compression = {"compressed": False, "input_path": video_path, "output_path": video_path}
+    if video_path and not args.no_compress_video:
+        video_compression = compress_video(
+            video_path,
+            max_mb=args.video_max_mb,
+            target_mb=args.video_target_mb,
+            output_dir=args.compressed_video_dir,
+        )
+        video_path = video_compression["output_path"]
     result = {
         "endpoint": args.endpoint,
-        "video": upload_one(args.endpoint, token, "video", uploads["video"], "1"),
-        "poc": upload_one(args.endpoint, token, "poc", uploads["poc"], "2"),
+        "video_compression": video_compression,
+        "video": upload_one(args.endpoint, token, "video", video_path, "1", args.upload_timeout),
+        "poc": upload_one(args.endpoint, token, "poc", uploads["poc"], "2", args.upload_timeout),
     }
 
     output_path = Path(args.output)

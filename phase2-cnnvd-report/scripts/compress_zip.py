@@ -9,6 +9,8 @@ import os
 import zipfile
 from pathlib import Path
 
+EXCLUDED_SUFFIXES = {".zip"}
+
 
 def default_zip_output(folder_path: str, prefix: str = "CNNVD") -> Path:
     """生成默认 zip 输出路径，输出到材料目录父级。"""
@@ -36,6 +38,8 @@ def compress_folder(folder_path: str, output_path: str = "", include_root: bool 
                 file_path = Path(root) / name
                 if file_path.resolve() == zip_path:
                     continue
+                if file_path.suffix.lower() in EXCLUDED_SUFFIXES:
+                    continue
                 if include_root:
                     arcname = file_path.relative_to(folder.parent)
                 else:
@@ -45,14 +49,25 @@ def compress_folder(folder_path: str, output_path: str = "", include_root: bool 
     return str(zip_path)
 
 
+def zip_has_nested_zip(zip_path: Path) -> bool:
+    """检查整包 zip 内是否误包含了 zip 文件。"""
+    if not zip_path.is_file() or zip_path.suffix.lower() != ".zip":
+        return False
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            return any(Path(name).suffix.lower() == ".zip" for name in zf.namelist())
+    except zipfile.BadZipFile:
+        return True
+
+
 def ensure_submission_zip(folder_path: str, output_path: str = "", prefix: str = "CNNVD") -> str:
-    """若默认位置已有 zip 则直接返回，否则创建。"""
+    """确保单漏洞整包 zip 存在；旧包含嵌套 zip 时自动重建。"""
     folder = Path(folder_path).expanduser().resolve()
     if not folder.is_dir():
         return ""
 
     candidate = Path(output_path).expanduser().resolve() if output_path else default_zip_output(str(folder), prefix=prefix)
-    if candidate.is_file():
+    if candidate.is_file() and not zip_has_nested_zip(candidate):
         return str(candidate)
     return compress_folder(str(folder), str(candidate), include_root=True)
 

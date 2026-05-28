@@ -22,7 +22,7 @@ except ImportError:
         return "杭州安恒信息技术股份有限公司"
 
     def get_default_phone() -> str:
-        return "15700082275"
+        return "17557289379"
 
 
 def find_docx_path(das_id: str, platform: str, data_dir: str = DEFAULT_DATA_DIR) -> Optional[str]:
@@ -150,6 +150,15 @@ def normalize_risk_level(value: str) -> str:
         if level in text:
             return level
     return "高危"
+
+
+def normalize_contact_phone(value: str) -> str:
+    """CNNVD 会校验手机号号段；不合规时使用已验证默认号码。"""
+    fallback = get_default_phone() if re.match(r"^1(?:3\d|4[5-9]|5[0-35-9]|6[2567]|7[0-8]|8\d|9[0-35-9])\d{8}$", get_default_phone()) else "17557289379"
+    phone = re.sub(r"\D+", "", value or "")
+    if re.match(r"^1(?:3\d|4[5-9]|5[0-35-9]|6[2567]|7[0-8]|8\d|9[0-35-9])\d{8}$", phone):
+        return phone
+    return fallback
 
 
 def infer_entity_category(fields: Dict[str, str]) -> str:
@@ -295,7 +304,7 @@ def extract_cnnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR, doc_path_o
     description_full = clean_ai_prefix(fields.get("漏洞简介", "") or fields.get("漏洞描述", ""))
     description = limit_text(description_full, 255)
     verification_source = normalize_one_paragraph(fields.get("漏洞验证过程", ""))
-    contact = fields.get("联系方式", "").strip() or get_default_phone()
+    contact = normalize_contact_phone(fields.get("联系方式", ""))
     affected_product = (
         fields.get("受影响实体名称", "").strip()
         or fields.get("影响产品", "").strip()

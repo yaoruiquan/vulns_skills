@@ -63,10 +63,11 @@ python3 scripts/batch_report.py start-next "<state_path>"
 3. 先打开 `https://www.cnvd.org.cn/` 通过门户验证码，登录后必须实际导航到 `/flaw/create`（或点击“立即上报漏洞”），最后执行 `browser_helpers.login_guard_command`；如果当前仍在 `/user/reportManage`，禁止只 `take_snapshot` 后结束。
 4. 执行 `browser_helpers.select2_command`，等待 Select2 联动完成。
 5. 只读取 `form_context.json.page_payloads` 填写文本字段，并用 `browser_helpers.is_open_command` 设置“是否公开”为“否”。
-6. 上传 `browser_upload_path` 指向的浏览器专用 ASCII 副本；它由 `prepare_form_context.py` 从 `attachment_zip_path` 原始 CNVD zip 复制生成，内容相同但避免 CDP 中文路径上传失败。上传前必须执行 `browser_helpers.attachment_prepare_command` 定位并标记当前可见附件 input，上传后必须执行 `browser_helpers.attachment_verify_command`，返回 `ok=true` 才能继续。
-7. 提交前执行字段完整性校验。附件校验失败、字段缺失或页面返回 `flawAttFile*_error` 时必须记录失败原因后停止，不要临场改写 JS、不要用 DataTransfer/fetch 构造文件。
-8. 最后处理验证码：先执行 `open_captcha_tab_command`。返回 `ok=true` 才新标签页开图并 OCR；若返回 `CNVD_CAPTCHA_IMAGE_BROKEN` 或页面出现防火墙验证码，先截图真实验证码图片并用 OCR 最多尝试 3 次，仍未通过再等待人工输入防火墙验证码。
-9. 提交成功后提取 `CNVD-ID`，再执行通知或批量记录。
+6. 填完可见字段后执行 `browser_helpers.sync_hidden_fields_command`，同步 Grails 隐藏字段。
+7. 上传 `browser_upload_path` 指向的浏览器专用副本；它由 `prepare_form_context.py` 从 `attachment_zip_path` 原始 CNVD zip 复制生成，内容相同并保留原始 zip 文件名。上传前必须执行 `browser_helpers.attachment_prepare_command` 定位并标记当前可见附件 input，上传后必须执行 `browser_helpers.attachment_verify_command`，返回 `ok=true` 才能继续。
+8. 提交前执行字段完整性校验和 `browser_helpers.waf_guard_command`。附件校验失败、字段缺失、页面返回 `flawAttFile*_error`，或 WAF guard 发现拦截/表单重置时必须记录失败原因后停止或重做本条填报，不要临场改写 JS、不要用 DataTransfer/fetch 构造文件。
+9. 最后处理验证码：先执行 `open_captcha_tab_command`。返回 `ok=true` 才新标签页开图并 OCR；若返回 `CNVD_CAPTCHA_IMAGE_BROKEN` 或页面出现防火墙验证码，先截图真实验证码图片并用 OCR 最多尝试 3 次，仍未通过再等待人工输入防火墙验证码。
+10. 提交成功后提取 `CNVD-ID`，再执行通知或批量记录。
 
 批量上报必须按以下顺序执行：
 
@@ -76,7 +77,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 4. 每条按单个上报骨架完成提交。
 5. 每条成功或失败后立即 `batch_report.py record`。
 6. 直接执行 `record` 输出的 `next_command` 进入下一条，第二条开始跳过环境检查。
-7. 全部完成后只执行一次 `batch_report.py notify`，不要单条通知。
+7. 全部完成后只执行一次 `batch_report.py notify`，不要单条通知；钉钉推送成功后会自动同步 `SUMMARY_TABLE_PATH` 指定的漏洞汇总表。
 
 ## 执行原则
 
@@ -84,7 +85,7 @@ python3 scripts/batch_report.py start-next "<state_path>"
 2. 表单里的登录态检查、Select2 下拉框、附件上传目标定位/上传后校验、验证码新标签页开图和验证码提交，必须使用 `form_context.json.browser_helpers` 或 `scripts/browser_snippets.py` 输出的脚本。
 3. 附件上传只能用 MCP `upload_file` 上传 `form_context.json.browser_upload_path` 到 `attachment_prepare_command` 标记的当前可见 file input；禁止上传到其他 input，禁止用 JS/DataTransfer/fetch 构造文件。`attachment_verify_command` 非 `ok=true` 时立即失败并写 summary。
 4. 验证码只走 MCP 截图图片元素到 `/tmp/captcha.png` 后脚本识别，不启动后台 OCR 进程；普通登录/提交验证码按单次真实图片识别，CNVD 防火墙验证码先 OCR 最多 3 次，仍未通过再等待人工处理。
-5. 单个上报成功后记录 `CNVD-ID`；批量模式每条只 `record`，全部完成后只执行一次 `batch_report.py notify`。
+5. 单个上报成功后记录 `CNVD-ID`；批量模式每条只 `record`，全部完成后只执行一次 `batch_report.py notify`，并在钉钉成功后同步汇总表。
 6. 如果脚本输出、`form_context.json` 和 Markdown 文档冲突，以脚本输出和 `form_context.json` 为准。
 
 ## 关键脚本
@@ -93,4 +94,5 @@ python3 scripts/batch_report.py start-next "<state_path>"
 - `scripts/browser_snippets.py`：生成页面内 `evaluate_script`，处理 Select2、登录态、附件上传目标/校验、验证码开图和提交。
 - `scripts/batch_report.py`：批量状态推进、记录编号、最终统一通知。
 - `scripts/publish_submission_zip.py`：上传单个 CNVD 原始 zip。
+- `scripts/update_summary.py`：更新 `SUMMARY_TABLE_PATH` 指定的漏洞汇总表。
 - `scripts/captcha_ocr.py`：验证码 OCR，读取截图文件并单次识别。

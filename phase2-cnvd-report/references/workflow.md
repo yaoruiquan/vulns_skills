@@ -68,7 +68,7 @@ python3 scripts/prepare_form_context.py <DAS-ID或DAS目录或CNVD目录或docx�
 
 - `ready` 必须为 `true` 才能进入浏览器阶段。
 - 不要把 docx 所在目录随手压成临时 `/tmp/<DAS-ID>-CNVD.zip`。
-- 如果材料目录里还没有 `CNVD-*.zip`，准备阶段会在材料目录父级自动补建一个单漏洞整包 zip，再继续上报。
+- 如果材料目录里还没有 `CNVD-*.zip`，准备阶段会在材料目录父级自动补建一个单漏洞整包 zip，再继续上报；自动补建时会排除源目录内已有的 `.zip` 文件，避免 zip 内再套 zip。
 
 ---
 
@@ -156,6 +156,15 @@ python3 scripts/browser_snippets.py login-guard
 如果登录后停在 `/user/reportManage` 或页面出现“立即上报漏洞”，下一步必须实际导航到 `https://www.cnvd.org.cn/flaw/create` 或点击“立即上报漏洞”，再执行 `login_guard_command`。不要只截取 reportManage 快照后结束；没有进入表单就没有完成浏览器阶段。
 
 如果首次进入 `/flaw/create` 触发 Cloudflare 或登录态失效，优先重启 Chrome 为 `seed-default` 复用日常 profile；`live-default` 只在确认普通 Chrome 已关闭时使用。验证码识别失败后不要复用旧验证码，也不要在密码框被清空时直接再次提交。
+
+提交前必须执行：
+
+```bash
+python3 scripts/browser_snippets.py sync-hidden-fields --title "<title_input>" --description "<description>"
+python3 scripts/browser_snippets.py waf-guard
+```
+
+`sync-hidden-fields` 用于同步 Grails 隐藏字段；`waf-guard` 用于发现 WAF 拦截或表单重置。如果 `waf-guard` 返回重置风险，重新执行下拉框、是否公开、附件上传和隐藏字段同步。
 
 ---
 
@@ -510,7 +519,7 @@ python3 scripts/publish_submission_zip.py \
   --notify
 ```
 
-该脚本只上传 `form_context.json` 中的 `submission_zip_path` / `attachment_zip_path`，即单个漏洞的 CNVD 原始整包 zip；不会上传整个批次目录，也不会重新压缩。远端目录必须通过 `REPORT_UPLOAD_REMOTE_DIR` 或 `--remote-dir` 显式配置。
+该脚本只上传 `form_context.json` 中的 `submission_zip_path` / `attachment_zip_path`，即单个漏洞的 CNVD 原始整包 zip；不会上传整个批次目录。若发现旧整包 zip 内嵌套了 zip，会先重建同名整包并排除源目录内已有 `.zip` 文件。远端目录必须通过 `REPORT_UPLOAD_REMOTE_DIR` 或 `--remote-dir` 显式配置。钉钉推送成功后会自动同步 `.env` 中 `SUMMARY_TABLE_PATH` 指定的漏洞汇总表。
 
 失败时也应推送失败原因，便于群里跟踪：
 

@@ -40,6 +40,7 @@ chmod +x "${SKILL_ROOT}/scripts/extract_vuln_data.py"
 chmod +x "${SKILL_ROOT}/scripts/compress_zip.py"
 chmod +x "${SKILL_ROOT}/scripts/prepare_form_context.py"
 chmod +x "${SKILL_ROOT}/scripts/publish_submission_zip.py"
+chmod +x "${SKILL_ROOT}/scripts/update_summary.py"
 chmod +x "${SKILL_ROOT}/scripts/dingtalk_notify.py"
 
 echo "Wrote MCP config: ${MCP_FILE}"

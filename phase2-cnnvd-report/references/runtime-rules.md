@@ -20,9 +20,12 @@
 - 漏洞类型级联必须点击最终叶子选项前面的圆圈/单选按钮完成选择，不要只点击文字，也不要按 Escape 关闭。
 - 每页优先按 `page_payloads` 一次性填写，不要因为单个字段反复 `take_snapshot`。
 - 第 2 页只填 `page_payloads.page2_text.description`、`technical_support`、`contact`。
+- 联系电话必须使用准备阶段输出的 `contact`，脚本会剔除平台不认可的手机号号段，例如 `168`。
 - `漏洞描述或简介` 最多 255 字，只填 `description`，不要改用 `description_full`。
 - 第 3 页只填 `page_payloads.page3_text.verification`，不要直接粘贴 `verification_source` 或 Word 原文。
+- 第 3 页 TinyMCE/iframe 只设 `innerHTML` 不够，提交前必须执行 `browser_helpers.sync_form_model_command`，同步 Vue `formModel.verifyProcess`。
 - 第 3 页必须上传 `verification_video_path` 和 `poc_file_path`；路径为空或不存在时先回到数据准备阶段修复。
+- 验证视频超过 50MB 时必须先压缩；`upload_cnnvd_attachments.py` 默认会调用 `scripts/compress_cnnvd_video.py` 压到 48MB 目标后再上传。不要直接上传 50MB 以上原始视频。
 - 第 3 页附件上传不要优先使用 MCP `upload_file`。CNNVD 页面是 Vue/Element UI 自定义上传组件，隐藏 input 可能出现“工具返回成功但组件 fileList 为空”。默认使用 `scripts/upload_cnnvd_attachments.py` 先调用 CNNVD 上传接口，再通过脚本生成的 `handleChange` 流程喂给 Vue 组件，触发组件内部上传和表单校验。
 
 ## 附件上传确定性流程
@@ -44,11 +47,12 @@
      --apply-js "<logs_dir>/cnnvd-apply-upload-state.js"
    ```
 
-4. 用 `chrome-devtools-cnnvd_evaluate_script` 执行 `logs/cnnvd-apply-upload-state.js` 中的函数，确认返回 `success=true` 且 video、poc 两项均成功；每项成功模式必须是 `mode=handleChange`，不要接受 `direct-fileList`。
-5. `apply-upload-state.js` 会从 CNNVD 返回的 server file URL 拉取文件 Blob，构造 `File`/`DataTransfer`，再调用组件 `handleChange`。这是 CNNVD Vue 组件校验需要的正式路径，不是本地文件绕路。
-6. 大视频会在组件内重新上传，等待时间按文件大小放大，13MB 左右视频允许等待 3 分钟以上；不要因为 10 秒内 `fileList` 未 success 就判定失败。
-7. 如果 `fetch` server file URL 失败、组件没有 `handleChange`/file input、或等待超时，必须判定附件上传失败并记录失败原因；禁止 fallback 为直接写 `comp.fileList` 后继续提交，因为表单校验不认可这个状态。
-8. 只有在脚本上传接口失败时，才退回手工 DOM 调试；不要启动长期 HTTP server，也不要依赖临时本地地址给 CNNVD 页面 fetch 本地文件。
+4. 上传脚本默认超时为 300 秒，并在视频超过 50MB 时自动压缩。输出 JSON 的 `video_compression` 会记录原始大小、压缩后大小、输出路径和码率。
+5. 用 `chrome-devtools-cnnvd_evaluate_script` 执行 `logs/cnnvd-apply-upload-state.js` 中的函数，确认返回 `success=true` 且 video、poc 两项均成功；视频成功模式应为 `mode=input-change`，PoC 通常为 `mode=handleChange`，不要接受 `direct-fileList`。
+6. `apply-upload-state.js` 会从 CNNVD 返回的 server file URL 拉取文件 Blob，构造 `File`/`DataTransfer`；视频通过原生 file input `change` 触发，PoC 通过组件 `handleChange` 触发。这是 CNNVD Vue 组件校验需要的正式路径，不是本地文件绕路。
+7. 大视频会在组件内重新上传，等待时间按文件大小放大；不要因为 10 秒内 `fileList` 未 success 就判定失败。
+8. 如果 `fetch` server file URL 失败、组件没有 `handleChange`/file input、或等待超时，必须判定附件上传失败并记录失败原因；禁止 fallback 为直接写 `comp.fileList` 后继续提交，因为表单校验不认可这个状态。
+9. 只有在脚本上传接口失败时，才退回手工 DOM 调试；不要启动长期 HTTP server，也不要依赖临时本地地址给 CNNVD 页面 fetch 本地文件。
 
 ## 最终提交按钮无响应处理
 
@@ -72,6 +76,8 @@
 - 验证过程必须是一段压缩总结后的文字，包含入口点、触发条件、关键利用步骤和验证结果。
 - 不插入图片，不粘贴大段 HTTP 报文、Cookie、代码或 Word 图片占位。
 - 如果 `verification` 为空，必须先补齐 `form_context.json`，不要在页面里临时编写。
+- CNNVD Vue 模型字段名以 `browser_helpers.probe_form_model_command` 探查结果为准；已知关键字段包括 `vulName`、`affectedVendor`、`affectedEntityName`、`affectedEntityVersion`、`affectedEntityDesc`、`hazardLevel`、`affectedClassify`、`vulDesc`、`supporter`、`supporterPhone`、`verifyProcess`。
+- `affectedClassify` 不要直接写 Vue 值，例如 `"30"` 可能显示为“其他软件”而不是“中间件”；必须点击展开后的 DOM 选项。
 
 ## 验证码
 
@@ -103,10 +109,12 @@
 - `record` 输出 `next_command` 后直接进入下一条；第二条及之后跳过环境检查。
 - 批量模式禁止单条执行 `publish_submission_zip.py --notify`。
 - 全部完成后只执行一次 `batch_report.py notify <state_path>`，统一上传附件并推送一条钉钉消息。
+- 钉钉推送成功后必须同步 `SUMMARY_TABLE_PATH` 指定的漏洞汇总表；`batch_report.py notify` 会自动执行 `scripts/update_summary.py`。
 
 ## 通知与汇总表
 
 - 监管上报类技能统一使用同一个钉钉机器人，关键词为 `监管上报`。
 - `publish_submission_zip.py` 只上传单个漏洞的 CNNVD 原始整包 zip，不上传整个批次目录。
+- 自动补建整包 zip 时必须排除源目录里已有的 `.zip` 文件；如果旧整包里已经嵌套 zip，脚本会重建同名整包。
 - 钉钉 webhook 和密钥只能来自 `.env`，不要写进文档或提交到 Git。
 - 用户要求更新汇总表时使用 `scripts/update_summary.py`，并先读取 `references/summary-table.md`。

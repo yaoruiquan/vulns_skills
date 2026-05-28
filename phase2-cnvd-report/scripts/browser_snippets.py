@@ -212,6 +212,91 @@ def is_open_no_script() -> str:
 }""")
 
 
+def sync_hidden_fields_script(title: str = "", description: str = "") -> str:
+    """生成同步 Grails 可见控件和隐藏字段的脚本。"""
+    return as_iife(f"""() => {{
+  const explicitTitle = {js_string(title)};
+  const explicitDescription = {js_string(description)};
+  const valueOf = (selectors, fallback = '') => {{
+    for (const selector of selectors) {{
+      const el = document.querySelector(selector);
+      if (el && String(el.value || '').trim()) return String(el.value || '').trim();
+    }}
+    return fallback;
+  }};
+  const setValue = (selector, value) => {{
+    const el = document.querySelector(selector);
+    if (!el) return false;
+    el.value = value;
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    el.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+    return true;
+  }};
+  const titleValue = explicitTitle || valueOf(['#title1', '#title']);
+  const descriptionValue = explicitDescription || valueOf(['#description1', '#description']);
+  const updates = {{
+    title1: setValue('#title1', titleValue),
+    title: setValue('#title', titleValue),
+    titleHidden1: setValue('#titleHidden1', titleValue),
+    titleHidden: setValue('#titleHidden', titleValue),
+    description1: setValue('#description1', descriptionValue),
+    description: setValue('#description', descriptionValue),
+    descriptionHidden1: setValue('#descriptionHidden1', descriptionValue),
+    descriptionHidden: setValue('#descriptionHidden', descriptionValue)
+  }};
+  return {{
+    ok: Boolean(titleValue && descriptionValue && (updates.descriptionHidden1 || updates.descriptionHidden)),
+    titleLength: titleValue.length,
+    descriptionLength: descriptionValue.length,
+    updates,
+    next: '提交验证码或最终提交前必须确保 ok=true；若页面曾被 WAF 重置，重新执行 select2、is-open、attachment-prepare/upload/verify 后再同步隐藏字段。'
+  }};
+}}""")
+
+
+def waf_guard_script(expected_soft_style: str = "") -> str:
+    """生成 CNVD WAF/表单重置检查脚本。"""
+    return as_iife(f"""() => {{
+  const expectedSoftStyle = {js_string(expected_soft_style)};
+  const text = document.body ? document.body.innerText : '';
+  const illegal = /不合法参数|设置拦截|请求带有|防火墙|WAF|验证码保护/.test(text);
+  const valueOf = (selector) => {{
+    const el = document.querySelector(selector);
+    return el ? String(el.value || '') : '';
+  }};
+  const attachment = document.querySelector('#flawAttFile1');
+  const attachmentReady = Boolean(attachment && attachment.files && attachment.files.length > 0);
+  const state = {{
+    href: location.href,
+    illegal,
+    expectedSoftStyle,
+    formType1: valueOf('#isEvent1'),
+    formType: valueOf('#isEvent'),
+    softStyleId1: valueOf('#softStyleId1'),
+    softStyleId: valueOf('#softStyleId'),
+    titleHidden1: valueOf('#titleHidden1'),
+    titleHidden: valueOf('#titleHidden'),
+    descriptionHidden1: valueOf('#descriptionHidden1'),
+    descriptionHidden: valueOf('#descriptionHidden'),
+    attachmentReady,
+    attachmentName: attachmentReady ? attachment.files[0].name : ''
+  }};
+  const hiddenReady = Boolean((state.descriptionHidden1 || state.descriptionHidden) && (state.titleHidden1 || state.titleHidden));
+  const softStyleReset = Boolean(expectedSoftStyle && expectedSoftStyle !== '27' && state.softStyleId1 === '27');
+  const resetLikely = illegal || !hiddenReady || !attachmentReady || softStyleReset;
+  return {{
+    ok: !resetLikely,
+    code: resetLikely ? 'CNVD_FORM_RESET_OR_WAF_RISK' : 'CNVD_FORM_READY',
+    softStyleReset,
+    state,
+    next: resetLikely
+      ? '不要直接提交；重新执行 select2、is-open、attachment-prepare/upload/verify、sync-hidden-fields，并使用 form_context.json 中的降噪 description。'
+      : '可以继续验证码和提交。'
+  }};
+}}""")
+
+
 def attachment_prepare_script(attachment_path: str) -> str:
     """生成上传附件前定位并标记当前可见 file input 的脚本。"""
     expected_name = os.path.basename(attachment_path)
@@ -262,12 +347,13 @@ def attachment_prepare_script(attachment_path: str) -> str:
       inputs: details
     }};
   }}
+  const removedDuplicates = [];
   for (const el of inputs) {{
     el.removeAttribute('data-opencode-upload-target');
     el.removeAttribute('aria-label');
     if (el !== target && !isVisible(el)) {{
-      el.disabled = true;
-      el.setAttribute('data-opencode-disabled-duplicate', 'true');
+      removedDuplicates.push({{ id: el.id || '', name: el.name || '', formId: el.closest('form') ? (el.closest('form').id || '') : '' }});
+      el.remove();
     }}
   }}
   target.disabled = false;
@@ -282,6 +368,7 @@ def attachment_prepare_script(attachment_path: str) -> str:
     targetSelector: target.id ? `#${{target.id}}` : 'input[type=file][name=flawAttFile]',
     expectedName,
     expectedPath,
+    removedDuplicates,
     uploadRule: '接下来必须 take_snapshot，并且只对带有 aria-label=\"CNVD 附件上传目标\" 的 file input 执行 MCP upload_file；禁止上传到其他 file input，禁止用 JS/DataTransfer/fetch 构造文件。',
     inputs: details
   }};
@@ -374,6 +461,20 @@ def submit_captcha_script(code: str) -> str:
   }}
   const input = document.querySelector('#myCode1');
   if (!input) return {{ ok: false, reason: '未找到验证码输入框 #myCode1' }};
+  const syncValue = (targetSelector, sourceSelectors) => {{
+    const target = document.querySelector(targetSelector);
+    if (!target) return false;
+    const source = sourceSelectors.map((selector) => document.querySelector(selector)).find((el) => el && String(el.value || '').trim());
+    if (!source) return false;
+    target.value = source.value;
+    target.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    target.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    return true;
+  }};
+  syncValue('#titleHidden1', ['#title1', '#title']);
+  syncValue('#titleHidden', ['#title', '#title1']);
+  syncValue('#descriptionHidden1', ['#description1', '#description']);
+  syncValue('#descriptionHidden', ['#description', '#description1']);
   input.value = code;
   input.dispatchEvent(new Event('input', {{ bubbles: true }}));
   input.dispatchEvent(new Event('change', {{ bubbles: true }}));
@@ -397,6 +498,11 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("captcha-preview", help="兼容旧命令名；同 captcha-tab")
     sub.add_parser("login-guard", help="输出登录态和 Cloudflare 拦截检查脚本")
     sub.add_parser("is-open", help="输出将是否公开设为否的脚本（处理 CNVD 两组 radio 的问题）")
+    sync_hidden = sub.add_parser("sync-hidden-fields", help="同步 CNVD Grails 可见字段和隐藏字段")
+    sync_hidden.add_argument("--title", default="")
+    sync_hidden.add_argument("--description", default="")
+    waf_guard = sub.add_parser("waf-guard", help="检查 CNVD WAF 拦截和表单重置风险")
+    waf_guard.add_argument("--expected-soft-style", default="")
 
     attachment_prepare = sub.add_parser("attachment-prepare", help="输出上传 CNVD 附件前定位当前可见 file input 的脚本")
     attachment_prepare.add_argument("--attachment-path", required=True)
@@ -421,6 +527,10 @@ def main() -> int:
         print(login_guard_script())
     elif args.command == "is-open":
         print(is_open_no_script())
+    elif args.command == "sync-hidden-fields":
+        print(sync_hidden_fields_script(args.title, args.description))
+    elif args.command == "waf-guard":
+        print(waf_guard_script(args.expected_soft_style))
     elif args.command == "attachment-prepare":
         print(attachment_prepare_script(args.attachment_path))
     elif args.command == "attachment-verify":

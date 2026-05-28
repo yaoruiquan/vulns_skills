@@ -23,16 +23,22 @@
 - `scripts/browser_snippets.py` 输出的是可直接传给 `Runtime.evaluate` / MCP `evaluate_script` 的 IIFE 表达式；必须原样执行。禁止把脚本改回 `() => {...}` 或 `async () => {...}` 函数定义，否则 CDP 只会返回函数对象 `{}`，页面逻辑不会真正执行。
 - 不要依赖 a11y 树点击 Select2 选项，也不要只改 `<select>.value`。
 - Select2 返回 `ok=false` 时先看 `results[].options`，修正字段后再继续。
+- `/flaw/create` 同时存在 `myForm`（事件型）和 `myForm1`（通用型），同名字段互不关联。通用型上报也要防止事件型表单的隐藏控件干扰。
+- CNVD/Grails 提交读取隐藏字段，填完可见控件后必须执行 `browser_helpers.sync_hidden_fields_command`，同步 `descriptionHidden1`、`descriptionHidden`、`titleHidden1`、`titleHidden`。提交验证码脚本也会再同步一次，但不要把它当作唯一同步点。
+- 提交前执行 `browser_helpers.waf_guard_command`。如果返回 `CNVD_FORM_RESET_OR_WAF_RISK`，禁止继续提交，必须重新执行 Select2、`is-open`、附件上传和隐藏字段同步。
 - 除导航、下拉联动确认和提交结果确认外，不要为单个字段反复 `take_snapshot`。
 
 ## 字段规则
 
 - 基本信息”是否公开”必须使用 `browser_helpers.is_open_command` 生成的脚本设置”否”（CNVD 页面有两组 radio，必须全部处理）。
 - 漏洞描述不要带 `经恒脑AI代码审计智能体分析：` 前缀。
+- 准备阶段会对容易触发 CNVD WAF 的描述做降噪；不要在浏览器阶段临时把 `SqlValidator验证`、`堆叠查询`、`jdbcTemplate.update()`、SQL 语句、HTTP 报文或代码细节重新填回描述。细节统一放在附件中。
 - 选择完“漏洞类型”后，只继续填写 `description`。
 - `漏洞URL` 固定为 `http://test.com`。
 - 其余缺失必填项统一使用 `无` 或 `见附件`，不要再回 Word 补字段。
 - 附件原始来源必须是 `attachment_zip_path` 指向的 CNVD 原始整包 zip；浏览器上传时优先使用 `browser_upload_path` 指向的 ASCII 路径副本，避免 Chrome/CDP 中文路径上传失败。
+- 附件上传前必须执行 `attachment_prepare_command`。脚本会移除隐藏的 `#flawAttFile` 干扰项，只保留当前可见上传目标，避免 MCP 上传到错误 input。
+- WAF 拦截或页面返回“您的请求带有不合法参数，已被设置拦截！”后，页面可能重置为事件型表单、影响对象类型回到“操作系统”、`is_open` 回默认、附件被清空。此时必须从 Select2 联动开始重做，不要只补验证码。
 
 ## 验证码
 
@@ -60,9 +66,11 @@
 - `record` 输出 `next_command` 后直接进入下一条；第二条及之后跳过环境检查。
 - 批量模式禁止单条执行 `publish_submission_zip.py --notify`。
 - 全部完成后只执行一次 `batch_report.py notify <state_path>`，统一上传附件并推送一条钉钉消息。
+- 钉钉推送成功后必须同步 `SUMMARY_TABLE_PATH` 指定的漏洞汇总表；`batch_report.py notify` 会自动执行 `scripts/update_summary.py`。
 
 ## 通知与上传
 
 - 监管上报类技能统一使用同一个钉钉机器人，关键词为 `监管上报`。
 - `publish_submission_zip.py` 只上传单个漏洞的 CNVD 原始整包 zip，不上传整个批次目录。
+- 自动补建整包 zip 时必须排除源目录里已有的 `.zip` 文件；如果旧整包里已经嵌套 zip，脚本会重建同名整包。
 - 钉钉 webhook 和密钥只能来自 `.env`，不要写进文档或提交到 Git。

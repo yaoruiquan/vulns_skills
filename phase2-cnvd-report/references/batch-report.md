@@ -95,6 +95,7 @@ python3 scripts/batch_report.py notify "<state_path>"
 
 - 批量模式禁止在单条上报后执行 `publish_submission_zip.py --notify`。
 - `notify` 会逐条调用 `publish_submission_zip.py --json` 上传附件，但只调用一次 `dingtalk_notify.py`。
+- 钉钉推送成功后，`notify` 会把每条已提交记录同步到 `.env` 的 `SUMMARY_TABLE_PATH` 汇总表。
 - 如需演练，不上传不发送：
 
 ```bash

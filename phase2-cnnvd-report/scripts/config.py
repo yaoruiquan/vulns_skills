@@ -60,7 +60,7 @@ def get_company_name() -> str:
 
 def get_default_phone() -> str:
     """获取默认联系电话"""
-    return get('DEFAULT_CONTACT_PHONE', '15700082275')
+    return get('DEFAULT_CONTACT_PHONE', '17557289379')
 
 
 def get_chrome_port() -> int:
