@@ -21,7 +21,7 @@ https://www.nccsec.cn/company-center/manage-center
 - 未登录时会进入登录页，且登录方式是“企业”页签
 - 登录页有账号输入框、密码输入框、协议勾选框、蓝色“登录”按钮
 - 登录成功后，在管理中心右上角通过“提交漏洞”下拉菜单进入填表页
-- 表单底部点击“提交”后，会出现拖拽拼图验证
+- 企业登录后可能出现阿里云滑块验证；表单底部点击“提交”后也可能出现拖拽拼图验证
 - 验证通过并提交成功后，会进入“我的漏洞”列表页，可读到 `NCC-xxxx` 编号
 
 ## 登录与导航
@@ -45,15 +45,20 @@ https://www.nccsec.cn/company-center/manage-center
 
 | 字段 | MCP uid 模式 | 类型 | 说明 |
 |------|--------------|------|------|
-| 是否为原创漏洞 | combobox “* 是否为原创漏洞：” | select | 默认”是”，当前业务固定选”是” |
+| 是否0Day漏洞 | combobox “* 是否0Day漏洞：” 或相近 label | select | 使用 `is_0day`，值为“是/否” |
+| 是否为原创漏洞 | combobox “* 是否为原创漏洞：” | select | 平台可能默认“否”，当前业务固定切到“是” |
 | 发现日期 | combobox “* 发现日期：” value=”YYYY-MM-DD HH:MM:SS” | datetime | 页面自动填充当前时间，可修改 |
-| 漏洞类型 | combobox “* 漏洞类型：” | select | 一级分类，默认”通用型漏洞” |
+| 漏洞业务类型/漏洞类型 | combobox “* 漏洞类型：” | select | 固定保持/选择 `business_type=通用型漏洞`，不能选“事件型漏洞” |
 | 影响对象 | combobox “* 影响对象：” | select | 需点击选择，对应 `target_type` |
+| 厂商所属国家/地区 | combobox，label 可能为“产品厂商”“所属国家”“国家/地区” | select | 对应 `vendor_country`，无法判断时默认“中国大陆” |
 | 漏洞厂商 | textbox “* 漏洞厂商：” | input | 对应 `unit_name` |
 | 影响组件 | textbox “* 影响组件：” | input | 对应 `affected_product` |
 | 影响版本 | textbox “* 影响版本：” | input | 对应 `version` |
 | 漏洞名称 | textbox “* 漏洞名称：” | input | 对应 `title` |
-| 漏洞详细分类 | combobox “* 漏洞详细分类：” | select | 默认”SQL注入”，需匹配 docx 分类 |
+| 漏洞详细分类 | combobox “* 漏洞详细分类：” | select | 平台默认可能是”SQL注入”；取值必须在 `field-mapping.md` 的允许选项中 |
+| 版本号 | textbox | 动态 input | 选择“二进制”后出现，填 `version` |
+| 触发位置 | textbox multiline | 动态 textarea | 选择“二进制”后出现，填 `trigger_location` |
+| PoC | textbox multiline | 动态 textarea | 选择“二进制”后出现，填 `poc_text` |
 | SQL注入 POC 方法 | radio “get” / “post” | radio | 仅 SQL 注入类型显示 |
 | 目录导航/POC详情 | textbox multiline | textarea | 漏洞利用过程描述 |
 | 漏洞 URL | textbox “* 漏洞URL：” multiline | textarea | 对应 `url` |
@@ -69,7 +74,10 @@ https://www.nccsec.cn/company-center/manage-center
 1. **uid 动态变化**: 每次页面加载 uid 会变化，需用 `combobox/textbox` 的 label 文本匹配
 2. **下拉选项**: 点击 combobox 后弹出 listbox，选项需运行时获取
 3. **SQL注入专属字段**: 当漏洞详细分类为”SQL注入”时，显示 get/post radio 和目录导航输入
-4. **附件格式限制**: 仅支持 doc/docx/zip/py，第一版优先上传 zip
+4. **Element UI 选项池共享**: 影响对象、国家、分类等下拉选项会混在同一个 DOM 池，关闭后的历史 `.el-select-dropdown__item` 仍留在 DOM 中。选择选项时必须先定位当前 `.el-form-item` 的触发器，再只读取本次打开的可见 `.el-select-dropdown/.el-popper` 内选项；禁止直接全局搜索 `.el-select-dropdown__item`
+5. **textarea 顺序不稳定**: 不要按页面 textarea 索引填 PoC/触发位置/URL/描述，必须按 `.el-form-item__label` 定位后填写
+6. **短 label 精确匹配**: 动态字段如“类型”“中间件/框架”必须按完整 label 精确匹配当前表单项，不得用 `label.includes('类型')`，否则会误命中“漏洞类型/漏洞详细分类”
+7. **附件格式限制**: 仅支持 doc/docx/zip/py，当前默认只上传 `upload_zip_path`；多次上传可能导致前一个文件被替换
 
 ## 验证与提交结果
 

@@ -5,7 +5,10 @@
 ## 功能
 
 - 从本地漏洞 docx 材料提取上报字段
-- 自动识别同目录下的 zip/截图/视频附件
+- 优先使用 CNVD 材料，自动识别 `exp`/`poc` 目录 zip；没有现成 zip 时自动打包 CNVD 材料目录，并生成 `NCC-*.zip` 运行时上传副本
+- 上传 zip 超过 NCC 50MB 限制时，自动用 ffmpeg 压缩包内视频并生成 `NCC-*-compressed.zip`
+- 支持在准备阶段固化“是否0Day漏洞”“是否原创漏洞”的是/否选项
+- 自动识别截图/视频附件路径用于复核
 - 打开 NCC 平台企业中心，完成登录、表单填写、验证码识别和提交
 - 上传平台要求的附件材料
 - 提交成功后记录平台返回的 NCC-xxxx 编号
@@ -93,7 +96,9 @@ phase2-ncc-report/
 │   ├── start-chrome-debug.sh
 │   ├── chrome-devtools-mcp-wrapper.sh
 │   ├── extract_vuln_data.py
+│   ├── compress_upload_zip.py
 │   ├── prepare_form_context.py
+│   ├── browser_snippets.py
 │   ├── captcha_ocr.py
 │   └── dingtalk_notify.py
 └── references/           # agent 执行参考

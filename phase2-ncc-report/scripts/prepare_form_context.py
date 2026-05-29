@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from extract_vuln_data import DEFAULT_DATA_DIR, extract_ncc_data, resolve_input
+from extract_vuln_data import DEFAULT_DATA_DIR, extract_ncc_data, normalize_yes_no, resolve_input
 
 
 DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
@@ -43,6 +43,19 @@ def build_context(args: argparse.Namespace) -> dict:
     assert material_dir is not None
     assert docx_path is not None
     context = extract_ncc_data(material_dir, docx_path)
+    browser_defaults = context.setdefault("browser_defaults", {})
+    is_original = normalize_yes_no(args.is_original, default="")
+    is_0day = normalize_yes_no(args.is_0day, default="")
+    if is_original:
+        context["is_original"] = is_original
+        browser_defaults["is_original"] = is_original
+    if is_0day:
+        context["is_0day"] = is_0day
+        browser_defaults["is_0day"] = is_0day
+    if context.get("is_0day") not in {"是", "否"}:
+        raise SystemExit("缺少是否0Day漏洞，请在开始时明确传入 --is-0day 是 或 --is-0day 否")
+    if context.get("is_original") not in {"是", "否"}:
+        raise SystemExit("缺少是否原创漏洞，请在开始时明确传入 --is-original 是 或 --is-original 否")
     context.update(
         {
             "form_context_version": 1,
@@ -62,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR, help="漏洞数据根目录")
     parser.add_argument("--input-path", default="", help="具体 DAS 目录或材料目录")
     parser.add_argument("--docx-path", default="", help="直接指定 docx 文件路径")
+    parser.add_argument("--is-0day", default=os.environ.get("NCC_IS_0DAY", ""), help="是否0Day漏洞：是/否/yes/no/true/false/1/0")
+    parser.add_argument("--is-original", default=os.environ.get("NCC_IS_ORIGINAL", ""), help="是否原创漏洞：是/否/yes/no/true/false/1/0")
     parser.add_argument(
         "--prefer-source",
         default="CNVD",

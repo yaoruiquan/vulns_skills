@@ -37,6 +37,10 @@ vim .env
 | `DINGTALK_SECRET` | 钉钉机器人加签密钥，可选 | 空 |
 | `DINGTALK_KEYWORD` | 钉钉机器人关键词，可选 | 空 |
 | `DINGTALK_ENABLED` | 是否启用钉钉通知 | `true` |
+| `NCC_UPLOAD_WORK_DIR` | NCC 上传 zip 运行时副本父目录；不写回源材料目录 | `/tmp` |
+| `NCC_UPLOAD_MAX_MB` | NCC 附件大小限制，单位 MiB | `50` |
+| `NCC_VIDEO_COMPRESS_ENABLED` | 上传 zip 超限时是否用 ffmpeg 压缩包内视频 | `true` |
+| `NCC_FFMPEG_BIN` | ffmpeg 可执行文件路径或命令名 | `ffmpeg` |
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -100,7 +104,7 @@ claude mcp get ncc-chrome
 | 2 | 登录并进入填表页 | 打开 `NCC_PLATFORM_URL`，必要时完成企业登录，再从右上角“提交漏洞”进入表单 |
 | 3 | 确认表单 | 用 MCP 快照确认表单字段、下拉值和上传控件 |
 | 4 | 填写表单 | 浏览器阶段只读取 `form_context.json`，按 `references/field-mapping.md` 填写漏洞信息 |
-| 5 | 上传附件 | 第一版优先上传 `form_context.json` 中的 `upload_zip_path`，如页面支持再补充 `docx/截图/视频` |
+| 5 | 上传附件 | 默认只上传 `form_context.json` 中的 `upload_zip_path`；该文件是从 CNVD 材料 zip 复制/改名，或在没有现成 zip 时由 CNVD 材料目录自动打包出的 `NCC-*.zip` 运行时副本；超过 `NCC_UPLOAD_MAX_MB` 时会先用 ffmpeg 压缩包内视频并改用 `NCC-*-compressed.zip` |
 | 6 | 提交验证 | 点击提交后，人工完成拖拽拼图验证 |
 | 7 | 记录结果 | 读取成功页中的 `NCC-xxxx` 编号 |
 | 8 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
@@ -117,7 +121,9 @@ claude mcp get ncc-chrome
 | `scripts/start-chrome-debug.sh` | 启动本 skill 专用 Chrome |
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 `DAS` 目录或 `docx` 提取 NCC 上报字段，并识别 zip/截图/视频附件 |
+| `scripts/compress_upload_zip.py` | 当上传 zip 超过限制时解包、压缩视频并重新打包 |
 | `scripts/prepare_form_context.py` | 生成浏览器填表阶段唯一读取的 NCC `form_context.json` |
+| `scripts/browser_snippets.py` | 根据 `form_context.json` 输出 NCC 页面可执行的填表、上传后漏填检查 `evaluate_script` 片段 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人，支持关键词和链接 |
 
@@ -141,7 +147,11 @@ claude mcp get ncc-chrome
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - `.env` 里只保存父目录，不保存具体某一次的 `docx` 路径；实际运行时通过 `--input-path` 或 `--docx-path` 传入。
 - Step 1 必须先生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
+- Step 1 必须明确“是否0Day漏洞/是否原创漏洞”：通过 `--is-0day 是/否`、`--is-original 是/否` 写入 `form_context.json`；给“是”就选“是”，给“否”就选“否”，浏览器填表不临场猜。
 - 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
 - 第一次开发或平台页面变化时，必须先用 MCP `take_snapshot` 更新 `references/selectors.md`，再执行填表。
 - 当前已知登录页没有普通验证码；点击提交后会出现拖拽拼图验证，第一版由人工接管。
+- 企业登录后如出现阿里云滑块验证，必须人工完成后再继续自动化。
+- NCC 页面附件控件可能只保留最后一次上传文件；默认只上传 `upload_zip_path`，不要再补传 docx/截图/视频导致 zip 被替换。
+- MP4 通常已经压缩过，zip 本身降幅有限；附件超 50MB 时必须靠 `ffmpeg` 降低视频码率/分辨率，脚本只处理运行时 zip 副本，不改源材料。
 - 不要把其他 skill 的端口表放进本文件；跨 skill 并发说明放在 README 高级章节。
