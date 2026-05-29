@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_ncc_data, normalize_yes_no, resolve_input
+from prepare_ncc_material import DEFAULT_TEMPLATE_PATH, prepare_ncc_material
 
 
 DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
@@ -34,34 +35,65 @@ def default_context_output(context: dict) -> Path:
     return Path(DEFAULT_FORM_CONTEXT_DIR).expanduser() / month / das_id / "form_context.json"
 
 
+def resolve_bound_day_original(args: argparse.Namespace) -> str:
+    """是否0Day漏洞和是否原创漏洞在 NCC 流程中绑定为同一个是/否值。"""
+    values = []
+    for value in (args.is_0day_original, args.is_0day, args.is_original):
+        normalized = normalize_yes_no(value, default="")
+        if normalized:
+            values.append(normalized)
+    if not values:
+        raise SystemExit(
+            "生成 form_context.json 前必须先确认是否0Day/原创绑定值，请传入 --is-0day-original 是 或 --is-0day-original 否"
+        )
+    if any(value not in {"是", "否"} for value in values) or len(set(values)) != 1:
+        raise SystemExit("是否0Day漏洞和是否原创漏洞必须绑定一致：是都为是，否都为否")
+    return values[0]
+
+
 def build_context(args: argparse.Namespace) -> dict:
     """一次性整理浏览器填表所需的 NCC FormContext。"""
-    material_dir, docx_path, error = resolve_input(args)
-    if error:
-        raise SystemExit(error)
+    day_original = resolve_bound_day_original(args)
+    is_0day = day_original
+    is_original = day_original
+    ncc_material_result = {}
+    if args.prepare_ncc_material:
+        target = args.docx_path or args.input_path or args.das_id
+        if not target:
+            raise SystemExit("缺少输入参数，请提供 DAS-ID、--input-path 或 --docx-path")
+        ncc_material_result = prepare_ncc_material(
+            target,
+            prefer_source=args.prefer_source,
+            template_path=Path(args.ncc_template).expanduser(),
+            force=args.force_ncc_material,
+        )
+        material_dir = Path(str(ncc_material_result["ncc_dir"]))
+        docx_path = Path(str(ncc_material_result["ncc_docx"]))
+    else:
+        material_dir, docx_path, error = resolve_input(args)
+        if error:
+            raise SystemExit(error)
 
     assert material_dir is not None
     assert docx_path is not None
     context = extract_ncc_data(material_dir, docx_path)
+    if not context.get("upload_zip_exists"):
+        raise SystemExit(
+            "未生成可上传的 NCC zip，请检查 upload_zip_path、源材料目录和视频压缩结果；"
+            "浏览器阶段禁止继续使用空附件路径。"
+        )
     browser_defaults = context.setdefault("browser_defaults", {})
-    is_original = normalize_yes_no(args.is_original, default="")
-    is_0day = normalize_yes_no(args.is_0day, default="")
-    if is_original:
-        context["is_original"] = is_original
-        browser_defaults["is_original"] = is_original
-    if is_0day:
-        context["is_0day"] = is_0day
-        browser_defaults["is_0day"] = is_0day
-    if context.get("is_0day") not in {"是", "否"}:
-        raise SystemExit("缺少是否0Day漏洞，请在开始时明确传入 --is-0day 是 或 --is-0day 否")
-    if context.get("is_original") not in {"是", "否"}:
-        raise SystemExit("缺少是否原创漏洞，请在开始时明确传入 --is-original 是 或 --is-original 否")
+    context["is_original"] = is_original
+    browser_defaults["is_original"] = is_original
+    context["is_0day"] = is_0day
+    browser_defaults["is_0day"] = is_0day
     context.update(
         {
             "form_context_version": 1,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "source_docx_path": str(docx_path),
-            "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；禁止重新运行 Word 提取脚本。",
+            "ncc_material": ncc_material_result,
+            "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；NCC Word 材料只在准备阶段生成，浏览器阶段禁止重新运行 Word 提取脚本。",
         }
     )
     return context
@@ -75,8 +107,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR, help="漏洞数据根目录")
     parser.add_argument("--input-path", default="", help="具体 DAS 目录或材料目录")
     parser.add_argument("--docx-path", default="", help="直接指定 docx 文件路径")
-    parser.add_argument("--is-0day", default=os.environ.get("NCC_IS_0DAY", ""), help="是否0Day漏洞：是/否/yes/no/true/false/1/0")
-    parser.add_argument("--is-original", default=os.environ.get("NCC_IS_ORIGINAL", ""), help="是否原创漏洞：是/否/yes/no/true/false/1/0")
+    parser.add_argument("--is-0day-original", default="", help="是否0Day漏洞/是否原创漏洞绑定值：是/否/yes/no/true/false/1/0；必须每次启动时明确传入")
+    parser.add_argument("--is-0day", default="", help="兼容旧参数；必须与 --is-original 和 --is-0day-original 一致")
+    parser.add_argument("--is-original", default="", help="兼容旧参数；必须与 --is-0day 和 --is-0day-original 一致")
+    parser.set_defaults(prepare_ncc_material=True)
+    parser.add_argument("--prepare-ncc-material", dest="prepare_ncc_material", action="store_true", help="上报前生成/复用 NCC-材料目录，默认开启")
+    parser.add_argument("--no-prepare-ncc-material", dest="prepare_ncc_material", action="store_false", help="跳过 NCC-材料目录生成，保留旧流程")
+    parser.add_argument("--force-ncc-material", action="store_true", help="覆盖重建已有 NCC-材料目录")
+    parser.add_argument("--ncc-template", default=str(DEFAULT_TEMPLATE_PATH), help="NCC 通用型漏洞报告模板 docx")
     parser.add_argument(
         "--prefer-source",
         default="CNVD",

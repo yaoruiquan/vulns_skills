@@ -45,12 +45,13 @@ https://www.nccsec.cn/company-center/manage-center
 
 | 字段 | MCP uid 模式 | 类型 | 说明 |
 |------|--------------|------|------|
-| 是否0Day漏洞 | combobox “* 是否0Day漏洞：” 或相近 label | select | 使用 `is_0day`，值为“是/否” |
-| 是否为原创漏洞 | combobox “* 是否为原创漏洞：” | select | 平台可能默认“否”，当前业务固定切到“是” |
+| 漏洞业务类型 | 第 1 个 radio group | radio | 事件型/通用型，固定选择 `通用型漏洞` |
+| 是否0Day漏洞 | 第 2 个 radio group | radio | 使用 `is_0day`，值为“是/否” |
+| 是否为原创漏洞 | 第 3 个 radio group | radio | 使用 `is_original`，值为“是/否”；强制按 group index 2 点击，不走 label 匹配 |
 | 发现日期 | combobox “* 发现日期：” value=”YYYY-MM-DD HH:MM:SS” | datetime | 页面自动填充当前时间，可修改 |
-| 漏洞业务类型/漏洞类型 | combobox “* 漏洞类型：” | select | 固定保持/选择 `business_type=通用型漏洞`，不能选“事件型漏洞” |
+| 漏洞类型/漏洞详细分类 | combobox/select | select | 对应 `detail_category`，不要误操作第 1 个业务类型 radio group |
 | 影响对象 | combobox “* 影响对象：” | select | 需点击选择，对应 `target_type` |
-| 厂商所属国家/地区 | combobox，label 可能为“产品厂商”“所属国家”“国家/地区” | select | 对应 `vendor_country`，无法判断时默认“中国大陆” |
+| 厂商所属国家/地区 | combobox，label 可能为“产品厂商归属国家及地区”“产品厂商归属国家/地区”“厂商所属国家及地区”“所属国家/地区”“国家/地区” | select | 对应 `vendor_country`，不要用单独“产品厂商”宽泛匹配；无法判断时默认“中国大陆” |
 | 漏洞厂商 | textbox “* 漏洞厂商：” | input | 对应 `unit_name` |
 | 影响组件 | textbox “* 影响组件：” | input | 对应 `affected_product` |
 | 影响版本 | textbox “* 影响版本：” | input | 对应 `version` |
@@ -74,7 +75,7 @@ https://www.nccsec.cn/company-center/manage-center
 1. **uid 动态变化**: 每次页面加载 uid 会变化，需用 `combobox/textbox` 的 label 文本匹配
 2. **下拉选项**: 点击 combobox 后弹出 listbox，选项需运行时获取
 3. **SQL注入专属字段**: 当漏洞详细分类为”SQL注入”时，显示 get/post radio 和目录导航输入
-4. **Element UI 选项池共享**: 影响对象、国家、分类等下拉选项会混在同一个 DOM 池，关闭后的历史 `.el-select-dropdown__item` 仍留在 DOM 中。选择选项时必须先定位当前 `.el-form-item` 的触发器，再只读取本次打开的可见 `.el-select-dropdown/.el-popper` 内选项；禁止直接全局搜索 `.el-select-dropdown__item`
+4. **Element UI 选项池共享**: 影响对象、国家、分类等下拉选项会混在同一个 DOM 池，关闭后的历史 `.el-select-dropdown__item` 仍留在 DOM 中。主下拉按固定 `.el-select-dropdown` 索引取值：`[0]=影响对象`、`[1]=厂商国家/地区`、`[2]=漏洞详细分类`；动态下拉才定位当前 `.el-form-item` 触发器并回读当前控件值，未写回当前控件就返回失败
 5. **textarea 顺序不稳定**: 不要按页面 textarea 索引填 PoC/触发位置/URL/描述，必须按 `.el-form-item__label` 定位后填写
 6. **短 label 精确匹配**: 动态字段如“类型”“中间件/框架”必须按完整 label 精确匹配当前表单项，不得用 `label.includes('类型')`，否则会误命中“漏洞类型/漏洞详细分类”
 7. **附件格式限制**: 仅支持 doc/docx/zip/py，当前默认只上传 `upload_zip_path`；多次上传可能导致前一个文件被替换

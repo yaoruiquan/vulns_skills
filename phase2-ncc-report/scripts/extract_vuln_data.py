@@ -607,8 +607,87 @@ def classify_detail(fields: Dict[str, str], title: str, description: str) -> str
     return "其他"
 
 
-def extract_poc_text(fields: Dict[str, str], url: str, request_method: str) -> str:
-    """从 Word 中提取 PoC/触发信息，生成 NCC 动态 PoC 字段文本。"""
+def extract_http_request_block(text: str) -> str:
+    """从材料文本中提取原始 HTTP 请求块。"""
+    raw = normalize_text(text)
+    if not raw:
+        return ""
+    lines = raw.splitlines()
+    start_index = -1
+    request_line_re = re.compile(r"^\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+.+\s+HTTP/\d(?:\.\d)?\s*$", re.I)
+    for index, line in enumerate(lines):
+        if request_line_re.match(line):
+            start_index = index
+            break
+    if start_index < 0:
+        return ""
+
+    collected: list[str] = []
+    for offset, line in enumerate(lines[start_index:]):
+        stripped = line.strip()
+        if collected and not stripped:
+            remaining = lines[start_index + offset + 1 :]
+            next_text = next((candidate.strip() for candidate in remaining if candidate.strip()), "")
+            if not next_text or re.match(r"^[\u4e00-\u9fff].{0,30}$", next_text):
+                break
+            collected.append("")
+            continue
+        if collected and re.match(r"^(漏洞|修复|影响|危害|复现|分析|证明|备注|解决方案|步骤)\S{0,12}[:：]?$", stripped):
+            break
+        if collected and stripped.startswith(("###", "## ", "# ")):
+            break
+        collected.append(line.rstrip())
+        if len("\n".join(collected)) > 5000:
+            break
+    return "\n".join(collected).strip()
+
+
+def extract_curl_command_block(text: str) -> str:
+    """从材料文本中提取已有 curl PoC 命令。"""
+    raw = normalize_text(text)
+    if not raw:
+        return ""
+    lines = raw.splitlines()
+    start_index = -1
+    for index, line in enumerate(lines):
+        if re.match(r"^\s*curl\s+", line):
+            start_index = index
+            break
+    if start_index < 0:
+        return ""
+
+    collected: list[str] = []
+    for line in lines[start_index:]:
+        stripped = line.strip()
+        if collected and not stripped:
+            break
+        if collected and re.match(r"^(漏洞|修复|影响|危害|复现|分析|证明|备注|解决方案|步骤)\S{0,12}[:：]?$", stripped):
+            break
+        if collected and not collected[-1].rstrip().endswith("\\"):
+            break
+        collected.append(line.rstrip())
+        if len("\n".join(collected)) > 5000:
+            break
+    return "\n".join(collected).strip()
+
+
+def extract_poc_text(fields: Dict[str, str], url: str, request_method: str, detail_category: str = "") -> str:
+    """从 Word 中提取 NCC 动态 PoC 字段文本；仅 SQL 注入需要已有真实 PoC。"""
+    if detail_category != "SQL注入":
+        return "见附件"
+
+    candidate_values = [
+        first_value(fields, "SQL注入Poc", "SQL注入POC", "SQL注入PoC", "POC", "PoC", "poc", "完整PoC描述"),
+        first_value(fields, "漏洞验证过程", "验证过程", "漏洞验证", "漏洞分析"),
+    ]
+    for value in candidate_values:
+        request_block = extract_http_request_block(value)
+        if request_block:
+            return request_block
+        curl_block = extract_curl_command_block(value)
+        if curl_block:
+            return curl_block
+
     return "见附件"
 
 
@@ -678,10 +757,15 @@ def collect_attachments(material_dir: Path, title: str = "", das_id: str = "") -
     upload_files = []
     if ncc_zip_path:
         upload_files.append(ncc_zip_path)
+    upload_zip_path_obj = Path(ncc_zip_path) if ncc_zip_path else Path()
+    upload_zip_exists = bool(ncc_zip_path and upload_zip_path_obj.is_file() and upload_zip_path_obj.stat().st_size > 0)
 
     return {
         "docx_path": str(docx_path) if docx_path else "",
         "upload_zip_path": ncc_zip_path,
+        "upload_zip_basename": upload_zip_path_obj.name if ncc_zip_path else "",
+        "upload_zip_dir": str(upload_zip_path_obj.parent) if ncc_zip_path else "",
+        "upload_zip_exists": upload_zip_exists,
         "upload_zip_prepared_path": prepared_zip_path,
         "upload_zip_source_path": str(source_zip_paths[0]) if source_zip_paths else "",
         "upload_zip_created": bool(ncc_zip_path and not source_zip_paths),
@@ -701,21 +785,73 @@ def collect_attachments(material_dir: Path, title: str = "", das_id: str = "") -
 
 
 def extract_fields_from_docx(doc_path: Path) -> Dict[str, str]:
-    """从 docx 第一张表提取键值字段。"""
+    """从 docx 提取键值字段，兼容 CNVD/CNNVD 表格和 NCC 段落模板。"""
     doc = Document(str(doc_path))
     table = doc.tables[0] if doc.tables else None
-    if not table:
-        return {}
-
     fields: Dict[str, str] = {}
-    for row in table.rows:
-        cells = row.cells
-        if len(cells) < 2:
-            continue
-        key = normalize_text(cells[0].text)
-        value = normalize_text(cells[1].text)
-        if key and value:
-            fields[key] = value
+    if table:
+        for row in table.rows:
+            cells = row.cells
+            if len(cells) < 2:
+                continue
+            key = normalize_text(cells[0].text)
+            value = normalize_text(cells[1].text)
+            if key and value:
+                fields[key] = value
+        if fields:
+            return fields
+
+    paragraphs = [normalize_text(paragraph.text) for paragraph in doc.paragraphs]
+    paragraphs = [text for text in paragraphs if text]
+
+    def value_after_prefix(prefixes: tuple[str, ...]) -> str:
+        for text in paragraphs:
+            compact = text.replace("：", ":")
+            for prefix in prefixes:
+                if compact.startswith(prefix):
+                    return normalize_text(compact.split(":", 1)[1] if ":" in compact else "")
+        return ""
+
+    def collect_between(start_prefixes: tuple[str, ...], end_prefixes: tuple[str, ...]) -> str:
+        collecting = False
+        values: list[str] = []
+        for text in paragraphs:
+            if not collecting and any(text.startswith(prefix) for prefix in start_prefixes):
+                collecting = True
+                suffix = text.split("：", 1)[1] if "：" in text else text.split(":", 1)[1] if ":" in text else ""
+                if suffix.strip():
+                    values.append(suffix.strip())
+                continue
+            if collecting and any(text.startswith(prefix) for prefix in end_prefixes):
+                break
+            if collecting:
+                values.append(text)
+        return "\n".join(value for value in values if value).strip()
+
+    fields.update(
+        {
+            "漏洞名称": value_after_prefix(("漏洞报告标题",)),
+            "提交日期": value_after_prefix(("漏洞发现时间",)),
+            "漏洞类型": value_after_prefix(("漏洞技术类型",)),
+            "漏洞厂商": value_after_prefix(("漏洞厂商全称",)),
+            "影响产品": value_after_prefix(("已知受影响产品及版本",)),
+            "影响版本": extract_version(value_after_prefix(("已知受影响产品及版本",))),
+            "漏洞描述": collect_between(("漏洞描述",), ("漏洞危害",)),
+            "漏洞危害": collect_between(("漏洞危害",), ("漏洞厂商全称",)),
+            "漏洞触发条件": value_after_prefix(("2）触发条件",)),
+            "漏洞验证过程": "\n".join(
+                value
+                for value in [
+                    collect_between(("1）完整PoC描述",), ("2）触发条件",)),
+                    collect_between(("1）基础环境搭建",), ("2）漏洞触发操作",)),
+                    collect_between(("2）漏洞触发操作",), ("3）复现注意事项",)),
+                ]
+                if value
+            ),
+            "临时解决方案": collect_between(("3、修复方案",), ("4、备注",)),
+        }
+    )
+    fields = {key: value for key, value in fields.items() if normalize_text(value)}
     return fields
 
 
@@ -819,7 +955,7 @@ def extract_ncc_data(material_dir: Path, docx_path: Path) -> Dict[str, object]:
     vendor_country = infer_vendor_country(fields, unit_name, affected_product, title)
     url = first_value(fields, "漏洞URL", "漏洞定位")
     request_method = first_value(fields, "请求方式")
-    poc_text = extract_poc_text(fields, url, request_method)
+    poc_text = extract_poc_text(fields, url, request_method, detail_category)
     is_original = normalize_yes_no(first_value(fields, "是否为原创漏洞", "是否原创漏洞", "是否原创"), default="")
     is_0day = normalize_yes_no(
         first_value(fields, "是否0Day漏洞", "是否0day漏洞", "是否 0Day 漏洞", "0Day漏洞", "零日漏洞"),
@@ -834,6 +970,9 @@ def extract_ncc_data(material_dir: Path, docx_path: Path) -> Dict[str, object]:
         "material_source": detect_material_source(material_dir),
         "docx_path": attachments["docx_path"],
         "upload_zip_path": attachments["upload_zip_path"],
+        "upload_zip_basename": attachments["upload_zip_basename"],
+        "upload_zip_dir": attachments["upload_zip_dir"],
+        "upload_zip_exists": attachments["upload_zip_exists"],
         "upload_zip_prepared_path": attachments["upload_zip_prepared_path"],
         "upload_zip_source_path": attachments["upload_zip_source_path"],
         "upload_zip_created": attachments["upload_zip_created"],

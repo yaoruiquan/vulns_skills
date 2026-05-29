@@ -37,10 +37,27 @@ MCP: fill_form
 
 ## 上传附件
 
+先解析并校验真实上传路径：
+
+```bash
+python3 scripts/resolve_upload_path.py --context "<form_context.json>"
+python3 scripts/resolve_upload_path.py --context "<form_context.json>" --plain
+```
+
+批量处理前先执行：
+
+```bash
+python3 scripts/resolve_upload_path.py --batch-root "<form_context.json 父目录>"
+```
+
+只有 `ok=true`、`failed_count=0` 时才能继续批量上传。
+
+`upload_file.filePath` 必须使用 `resolve_upload_path.py` 输出的 `filePath` 原值，不要根据漏洞名手工拼 zip 路径；空格和短横线不同会导致上传空跑。
+
 ```text
 MCP: upload_file
   uid: "<文件上传 input uid>"
-  filePath: "/path/to/file.zip"
+  filePath: "<resolve_upload_path.py 输出的 filePath>"
 ```
 
 ## 读取提交结果

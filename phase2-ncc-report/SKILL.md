@@ -29,6 +29,8 @@ vim .env
 | `VULN_DATA_DIR` | 漏洞数据父目录，包含 DAS-T* 文件夹 | `/path/to/your/vulnerability/data` |
 | `FORM_CONTEXT_DIR` | 运行时 `form_context.json` 暂存目录 | `/tmp/vulns-skills/phase2-ncc-report/form-contexts` |
 | `PYTHON_PROJECT_PATH` | Python 项目路径，可选，用于导入共享模块 | `/path/to/your/python/project` |
+| `NCC_REPORT_TEMPLATE_PATH` | NCC 通用型漏洞报告 Word 模板 | `/Users/yao/Documents/网安- AI应用开发/监管上报/NCC通用型漏洞报告模板.docx` |
+| `REGULATORY_SUMMARY_DIR` | 监管上报汇总表目录 | `/Users/yao/Documents/网安- AI应用开发/监管上报/汇总表` |
 | `NCC_USERNAME` | NCC 平台登录账号，可选 | 空 |
 | `NCC_PASSWORD` | NCC 平台登录密码，可选 | 空 |
 | `CHROME_DEBUG_PORT` | 本 skill 专用 Chrome 调试端口 | `9334` |
@@ -100,14 +102,15 @@ claude mcp get ncc-chrome
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | 0 | 检查环境 | 确认 `.env`、Chrome 调试端口和 MCP 可用 |
-| 1 | 准备数据 | 用 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` |
+| 1 | 准备数据 | 先生成/复用同级 `NCC-<漏洞名>` 材料目录，再用 `prepare_form_context.py` 生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/YYYY-MM/DAS-ID/form_context.json` |
 | 2 | 登录并进入填表页 | 打开 `NCC_PLATFORM_URL`，必要时完成企业登录，再从右上角“提交漏洞”进入表单 |
 | 3 | 确认表单 | 用 MCP 快照确认表单字段、下拉值和上传控件 |
 | 4 | 填写表单 | 浏览器阶段只读取 `form_context.json`，按 `references/field-mapping.md` 填写漏洞信息 |
 | 5 | 上传附件 | 默认只上传 `form_context.json` 中的 `upload_zip_path`；该文件是从 CNVD 材料 zip 复制/改名，或在没有现成 zip 时由 CNVD 材料目录自动打包出的 `NCC-*.zip` 运行时副本；超过 `NCC_UPLOAD_MAX_MB` 时会先用 ffmpeg 压缩包内视频并改用 `NCC-*-compressed.zip` |
-| 6 | 提交验证 | 点击提交后，人工完成拖拽拼图验证 |
-| 7 | 记录结果 | 读取成功页中的 `NCC-xxxx` 编号 |
-| 8 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
+| 6 | 提交前表单检查 | 上传附件后必须运行 `browser_snippets.py post-upload-audit`，确认 `ok=true`、无漏填、附件已上传后才能提交 |
+| 7 | 提交验证 | 点击提交后，人工完成拖拽拼图验证 |
+| 8 | 记录结果 | 读取成功页中的 `NCC-xxxx` 编号 |
+| 9 | 可选通知 | 已配置 `DINGTALK_WEBHOOK` 时推送钉钉通知 |
 
 详细步骤见 `references/workflow.md`。
 
@@ -122,7 +125,9 @@ claude mcp get ncc-chrome
 | `scripts/chrome-devtools-mcp-wrapper.sh` | MCP wrapper，连接到 `CHROME_DEBUG_PORT` |
 | `scripts/extract_vuln_data.py` | 从 `DAS` 目录或 `docx` 提取 NCC 上报字段，并识别 zip/截图/视频附件 |
 | `scripts/compress_upload_zip.py` | 当上传 zip 超过限制时解包、压缩视频并重新打包 |
+| `scripts/prepare_ncc_material.py` | 上报前根据 CNVD/CNNVD Word 生成 `NCC-<漏洞名>` 材料目录和 NCC 通用型漏洞报告 Word |
 | `scripts/prepare_form_context.py` | 生成浏览器填表阶段唯一读取的 NCC `form_context.json` |
+| `scripts/resolve_upload_path.py` | 上传前从 `form_context.json` 校验并输出真实 `upload_zip_path`，诊断手敲文件名错误 |
 | `scripts/browser_snippets.py` | 根据 `form_context.json` 输出 NCC 页面可执行的填表、上传后漏填检查 `evaluate_script` 片段 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
 | `scripts/dingtalk_notify.py` | 将上报结果推送到钉钉机器人，支持关键词和链接 |
@@ -146,9 +151,12 @@ claude mcp get ncc-chrome
 - NCC 平台账号密码明文存储有风险，不要复制或分享 `.env`。
 - 钉钉 webhook 属于敏感配置，只能放在 `.env`，不要写进文档或提交到 Git。
 - `.env` 里只保存父目录，不保存具体某一次的 `docx` 路径；实际运行时通过 `--input-path` 或 `--docx-path` 传入。
-- Step 1 必须先生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 `extract_vuln_data.py`。
-- Step 1 必须明确“是否0Day漏洞/是否原创漏洞”：通过 `--is-0day 是/否`、`--is-original 是/否` 写入 `form_context.json`；给“是”就选“是”，给“否”就选“否”，浏览器填表不临场猜。
+- Step 1 默认会先生成/复用 `NCC-<漏洞名>` 材料目录；已有 NCC 目录不会覆盖，除非显式使用 `--force-ncc-material`。
+- Step 1 必须先生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 Word 提取或 NCC 材料生成脚本。
+- Step 1 生成任何材料或 JSON 前，必须先向用户确认一次“是否0Day漏洞/是否原创漏洞”的绑定值。二者绑定：是都为是，否都为否。`prepare_form_context.py` 和单独运行的 `prepare_ncc_material.py` 都优先使用 `--is-0day-original 是/否`；兼容旧参数 `--is-0day`、`--is-original`，但旧参数必须一致；不得从 Word 字段或 `.env` 兜底猜测。
+- Step 6 是硬性提交 gate：附件上传后必须执行 `post-upload-audit`，返回 `ok=true`、`missingRequired=[]`、`skippedProtected=[]`、`attachmentUploaded=true`、`exactAttachmentMatch=true`、`uploadErrors=[]` 才能点击提交。
 - 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
+- 上传附件前必须用 `resolve_upload_path.py --context <form_context.json>` 读取真实 `filePath`；批量处理前必须用 `resolve_upload_path.py --batch-root <form_context父目录>` 扫描整批；不要手动把漏洞名里的空格改成短横线或重新拼 zip 文件名。
 - 第一次开发或平台页面变化时，必须先用 MCP `take_snapshot` 更新 `references/selectors.md`，再执行填表。
 - 当前已知登录页没有普通验证码；点击提交后会出现拖拽拼图验证，第一版由人工接管。
 - 企业登录后如出现阿里云滑块验证，必须人工完成后再继续自动化。
