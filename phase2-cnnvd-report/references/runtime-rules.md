@@ -11,6 +11,7 @@
 - 浏览器阶段只能读取 `form_context.json`。
 - 不要在浏览器阶段重新读取 Word、重新运行 `extract_vuln_data.py`、重新总结验证过程或重新压缩目录。
 - `prepare_form_context.py` 已固化 `dropdown_plan`、`page_payloads`、`ocr`、附件路径和钉钉收尾信息。
+- 生成 `form_context.json` 前必须先确认 `--originality 原创|非原创`；脚本不从 Word 或 `.env` 猜测原创性。
 - `ready` 必须为 `true` 才能进入浏览器阶段；如为 `false`，先修复 `checks` 中失败项。
 
 ## 页面操作
@@ -106,6 +107,11 @@
 - 批量状态只由 `scripts/batch_report.py` 管理。
 - 第一条完成环境检查后执行 `mark-env`。
 - 每条提交成功后立刻执行 `record` 记录 `CNNVD-ID`。
+- 每条提交成功后先检查 `form_context.json.disclosure_report.required`。非原创漏洞必须先完成漏洞通报报送，再执行 `record`；原创漏洞直接 `record`。
+- 非原创漏洞通报关联编号搜索只输入 CNNVD 编号最后一段数字，例如 `CNNVD-2026-39895760` 搜索 `39895760`。
+- 非原创漏洞通报选择关联编号前必须清空旧的 `vulIdList`/`vulIdListNew`，最终只允许 1 个关联编号；页面显示 `+1` 说明存在旧选择残留，不能提交。
+- 非原创漏洞通报选择关联编号后，必须先 blur/Escape 并点击页面空白处收起编号下拉框，再上传附件；如果 `audit-disclosure-report` 返回“关联漏洞编号下拉框未收起”，禁止继续点上传附件。
+- 非原创漏洞通报页面要求提交人联系电话和技术支持联系电话不同；脚本必须自动避开相同手机号。
 - `record` 输出 `next_command` 后直接进入下一条；第二条及之后跳过环境检查。
 - 批量模式禁止单条执行 `publish_submission_zip.py --notify`。
 - 全部完成后只执行一次 `batch_report.py notify <state_path>`，统一上传附件并推送一条钉钉消息。

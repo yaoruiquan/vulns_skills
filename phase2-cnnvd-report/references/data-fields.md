@@ -130,3 +130,41 @@ CNNVD 页面中文标签和 Vue model 字段名不一致。提交前执行 `form
 - `verifyProcess`：验证过程
 
 TinyMCE/iframe 内容必须和 `formModel.verifyProcess` 同步；只改 iframe body 会导致提交校验提示“请输入验证过程”。
+
+## 八、非原创漏洞通报报送
+
+非原创漏洞在通用型漏洞报送成功并取得 `CNNVD-ID` 后，还要进入 `https://www.cnnvd.org.cn/backHome/vulWarnSend` 执行三页“漏洞通报报送”。页面数据只读取 `form_context.json.disclosure_report`。
+
+### 第 1 页：漏洞通报信息
+
+- `关联漏洞编号`：使用刚获取的 `CNNVD-ID`，但平台远程搜索只输入最后一段数字，例如 `CNNVD-2026-39895760` 搜索 `39895760`；匹配结果仍按完整编号校验后选中。
+- 同一个 Vue SPA 会话中，`vulIdList` 可能保留上一条漏洞的 UUID；同步关联编号前必须先清空 `form.vulIdList` 和 `vulIdListNew`，再写入当前匹配项，避免页面显示 `+1`。
+- 关联编号选中后必须先收起下拉框再上传附件；下拉框未关闭时点击上传区域可能误选第二个 CNNVD 编号并显示 `+1`。
+- `有无POC` / `是否验证过`：默认 `有` / `是`。
+- `有无EXP` / `是否验证过`：默认 `有` / `是`。
+- `有无检测工具` / `是否验证过`：默认 `无` / `否`。
+- `上传附件`：上传 `disclosure_report.page1.attachment_path`，通常为单个漏洞的 CNNVD 原始整包 zip。
+- `联系人信息`：提交人信息优先保留页面登录态默认值；技术支持信息优先使用 `.env` 中 `CNNVD_DISCLOSURE_*`，缺失时由 `DEFAULT_CONTACT_*` 兜底。
+- 提交人联系电话和技术支持联系电话不能相同；如相同，脚本自动把技术支持联系电话改为 `ALTERNATE_CONTACT_PHONE`。
+
+### 第 2 页：撰写漏洞通报
+
+- `漏洞通报名称`：使用 `disclosure_report.page2.warn_name`。
+- 富文本正文：使用 `disclosure_report.page2.enclosure_content`，内容包含产品描述、影响版本、受影响资产情况、利用过程、技术细节、修补措施、检测规则和漏洞来源。
+- 富文本正文必须保留平台模板的 1-9 项标题顺序：
+  `1、产品描述（必填）`、`2、影响产品或组件及版本（必填）`、`3、受影响资产情况（必填）`、`4、受影响资产列表`、`5、利用过程及结果`、`6、技术细节表述（必填）`、`7、修补措施（必填）`、`8、检测规则`、`9、漏洞来源（必填）`。
+- 不要提交平台模板中的“示例/说明”原文；每一项都要用材料提取结果或固定兜底内容替换。
+- 富文本同步优先写 Vue `detailForm.enclosureContent` 和 iframe DOM；TinyMCE API 只作为兜底，避免隐藏编辑器触发 `bookmark` 异常。
+
+### 第 3 页：提交
+
+- 第 3 页只做最终确认和提交。
+- 提交前必须执行：
+
+```bash
+python3 scripts/browser_snippets.py audit-disclosure-report \
+  --form-context "<form_context.json>" \
+  --cnnvd-id "<CNNVD-ID>"
+```
+
+`ok=true` 后才能提交；如出现验证码，按 `captcha-ocr.md` 的单次识别流程处理。

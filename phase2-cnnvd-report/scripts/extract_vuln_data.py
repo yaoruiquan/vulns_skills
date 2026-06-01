@@ -345,6 +345,7 @@ def extract_cnnvd_data(das_id: str, data_dir: str = DEFAULT_DATA_DIR, doc_path_o
         "contact": contact,
         "verification": "",
         "verification_source": verification_source,
+        "fix_suggestion": fields.get("修复建议", "").strip() or fields.get("修复方案", "").strip(),
         "verification_summary_required": True,
         "verification_video_path": verification_video_path,
         "poc_file_path": poc_file_path,

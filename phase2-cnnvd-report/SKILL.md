@@ -48,16 +48,16 @@ CNNVD 上报 skill。执行时以脚本输出和 `form_context.json` 为准，�
 curl -s http://127.0.0.1:9333/json/version
 ```
 
-单个上报先生成上下文：
+单个上报先生成上下文。生成前必须先让用户选择“原创/非原创”；非原创在通用型漏洞报送拿到 CNNVD 编号后，还要继续执行漏洞通报报送：
 
 ```bash
-python3 scripts/prepare_form_context.py "<DAS-ID或DAS目录或CNNVD目录或docx路径>"
+python3 scripts/prepare_form_context.py "<DAS-ID或DAS目录或CNNVD目录或docx路径>" --originality "<原创|非原创>"
 ```
 
 批量上报先创建状态：
 
 ```bash
-python3 scripts/batch_report.py init "<批次目录>"
+python3 scripts/batch_report.py init "<批次目录>" --originality "<原创|非原创>"
 python3 scripts/batch_report.py start-next "<state_path>"
 ```
 
@@ -66,14 +66,14 @@ python3 scripts/batch_report.py start-next "<state_path>"
 单个上报必须按以下顺序执行；详细字段和页面选择以引用文件、脚本输出和 `form_context.json` 为准：
 
 1. 检查 `.env`、Chrome 调试端口和 MCP 连接。
-2. 执行 `prepare_form_context.py` 生成 `form_context.json`，确认 `ready=true`。
+2. 先提示用户选择“原创/非原创”，再执行 `prepare_form_context.py --originality "<原创|非原创>"` 生成 `form_context.json`，确认 `ready=true`。
 3. 打开 CNNVD 通用型漏洞报送页面并恢复登录态。
 4. 第 1 页只按 `dropdown_plan` / `page_payloads.page1_dropdowns` 处理漏洞类型、漏洞自评级、受影响实体分类三个必填下拉框。
 5. 第 1 页文本字段、第 2 页漏洞详情、第 3 页验证信息都只读取 `page_payloads`，每页一次性填写；提交前执行 `browser_helpers.sync_form_model_command` 同步 Vue `formModel` 和 TinyMCE `verifyProcess`。
 6. 第 3 页上传 `verification_video_path` 和 `poc_file_path`，不要临时找文件；视频超过 50MB 时先用 `scripts/compress_cnnvd_video.py` 压缩，上传脚本默认会自动压缩后再上传。视频走原生 file input `change`，PoC 可走组件 `handleChange`，不要直接写 `fileList`。
 7. 提交前检查必填下拉框、描述长度、验证过程、手机号、视频和 PoC 路径。
 8. 如遇验证码，最后一步截图识别，OCR 后立即填入并提交。
-9. 提交成功后提取 `CNNVD-ID`，再执行通知、批量记录或汇总表更新。
+9. 提交成功后提取 `CNNVD-ID`。如果 `form_context.json.disclosure_report.required=true`，先进入 `https://www.cnnvd.org.cn/backHome/vulWarnSend` 完成漏洞通报报送，再执行通知、批量记录或汇总表更新；原创漏洞跳过漏洞通报。
 
 批量上报必须按以下顺序执行：
 
@@ -101,6 +101,18 @@ python3 scripts/batch_report.py start-next "<state_path>"
 - `scripts/upload_cnnvd_attachments.py`：通过 CNNVD 上传接口上传第 3 页视频和 PoC，并生成回填 Vue 上传组件状态的浏览器脚本。
 - `scripts/compress_cnnvd_video.py`：将超过 50MB 的验证视频压缩到 48MB 目标后再上传。
 - `scripts/publish_submission_zip.py`：上传单个 CNNVD 原始 zip。
+- `scripts/browser_snippets.py`：输出通用型报送和非原创漏洞通报报送的页面同步/审计脚本。
 - `scripts/update_summary.py`：更新漏洞汇总表。
 - `scripts/start-chrome-debug.sh`：启动本 skill 专用 Chrome。
 - `scripts/chrome-devtools-mcp-wrapper.sh`：连接本 skill 的 Chrome 调试端口。
+
+## 原创/非原创规则
+
+- 开始生成 `form_context.json` 前必须先问用户：本批/本条是“原创”还是“非原创”。
+- `--originality 原创`：只执行现有三页“通用型漏洞报送”。
+- `--originality 非原创`：通用型漏洞报送成功并获取 `CNNVD-ID` 后，继续进入“漏洞通报管理 > 漏洞通报报送”，按 `form_context.json.disclosure_report` 完成三页漏洞通报。
+- 非原创漏洞通报第一页关联漏洞编号必须使用刚获取的 `CNNVD-ID`，不要手工拼旧编号。
+- 关联漏洞编号选中后必须先收起下拉框，再上传附件；如果审计脚本提示下拉框未收起，先处理该问题，不能继续点上传。
+- 非原创漏洞通报的页面脚本：
+  - `python3 scripts/browser_snippets.py sync-disclosure-report --form-context <form_context.json> --cnnvd-id <CNNVD-ID>`
+  - `python3 scripts/browser_snippets.py audit-disclosure-report --form-context <form_context.json> --cnnvd-id <CNNVD-ID>`

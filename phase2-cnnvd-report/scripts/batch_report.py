@@ -164,11 +164,17 @@ def find_item(state: dict, das_id: str = "", index: int = 0) -> dict:
     return item
 
 
-def prepare_command(item: dict) -> str:
-    return "python3 scripts/prepare_form_context.py {} --output {}".format(
+def prepare_command(item: dict, state: dict | None = None) -> str:
+    originality = (state or {}).get("originality", "")
+    command = "python3 scripts/prepare_form_context.py {} --output {}".format(
         shlex.quote(item["platform_dir"]),
         shlex.quote(item["context_file"]),
     )
+    if originality:
+        command += f" --originality {shlex.quote(originality)}"
+    else:
+        command += " --originality '<原创|非原创>'"
+    return command
 
 
 def record_command(state: dict, item: dict) -> str:
@@ -202,6 +208,7 @@ def command_init(args: argparse.Namespace) -> int:
         "skill_name": SKILL_NAME,
         "batch_dir": str(batch_dir),
         "batch_name": batch_dir.name,
+        "originality": args.originality,
         "state_path": str(state_path),
         "created_at": now(),
         "updated_at": now(),
@@ -257,7 +264,7 @@ def command_start_next(args: argparse.Namespace) -> int:
         "env_checked": state.get("env_checked", False),
         "skip_environment_check": bool(state.get("env_checked")) or args.skip_env_check,
         "item": item,
-        "prepare_context_command": prepare_command(item),
+        "prepare_context_command": prepare_command(item, state),
         "single_report_target": item["platform_dir"],
         "after_submit_record_command": record_command(state, item),
         "continue_rule": "本条提交后执行 after_submit_record_command；record 输出 next_command 后直接继续下一条，不需要清理上下文。",
@@ -492,6 +499,7 @@ def parse_args() -> argparse.Namespace:
     init.add_argument("batch_dir", help="批次根目录，内部包含 DAS-* 目录")
     init.add_argument("--output", default="", help="状态文件输出路径")
     init.add_argument("--force", action="store_true", help="覆盖已有状态文件")
+    init.add_argument("--originality", choices=["原创", "非原创"], required=True, help="本批漏洞原创性；非原创会在通用型报送后继续漏洞通报报送")
     init.set_defaults(func=command_init)
 
     status = sub.add_parser("status", help="查看批次状态")

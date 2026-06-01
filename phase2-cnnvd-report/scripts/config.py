@@ -63,6 +63,46 @@ def get_default_phone() -> str:
     return get('DEFAULT_CONTACT_PHONE', '17557289379')
 
 
+def get_default_email() -> str:
+    """获取默认联系邮箱"""
+    return get('DEFAULT_CONTACT_EMAIL', '')
+
+
+def get_disclosure_submitter() -> str:
+    """获取漏洞通报提交人"""
+    return get('CNNVD_DISCLOSURE_SUBMITTER', '')
+
+
+def get_disclosure_submitter_phone() -> str:
+    """获取漏洞通报提交人电话"""
+    return get('CNNVD_DISCLOSURE_SUBMITTER_PHONE', '')
+
+
+def get_disclosure_submitter_email() -> str:
+    """获取漏洞通报提交人邮箱"""
+    return get('CNNVD_DISCLOSURE_SUBMITTER_EMAIL', get_default_email())
+
+
+def get_disclosure_supporter() -> str:
+    """获取漏洞通报技术支持人员"""
+    return get('CNNVD_DISCLOSURE_SUPPORTER', get_disclosure_submitter())
+
+
+def get_disclosure_supporter_phone() -> str:
+    """获取漏洞通报技术支持电话"""
+    return get('CNNVD_DISCLOSURE_SUPPORTER_PHONE', get_default_phone())
+
+
+def get_alternate_phone() -> str:
+    """获取联系人手机号冲突时使用的备用号码"""
+    return get('ALTERNATE_CONTACT_PHONE', '15727382818')
+
+
+def get_disclosure_supporter_email() -> str:
+    """获取漏洞通报技术支持邮箱"""
+    return get('CNNVD_DISCLOSURE_SUPPORTER_EMAIL', get_default_email())
+
+
 def get_chrome_port() -> int:
     """获取 Chrome 调试端口"""
     return int(get('CHROME_DEBUG_PORT', '9333'))

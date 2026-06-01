@@ -15,7 +15,7 @@
 基础示例：
 
 ```bash
-python3 scripts/prepare_form_context.py "/path/to/DAS-T106006-xxx"
+python3 scripts/prepare_form_context.py "/path/to/DAS-T106006-xxx" --originality "<原创|非原创>"
 ```
 
 推荐示例：
@@ -23,6 +23,7 @@ python3 scripts/prepare_form_context.py "/path/to/DAS-T106006-xxx"
 ```bash
 python3 scripts/prepare_form_context.py \
   "/path/to/DAS-T106006-xxx" \
+  --originality "非原创" \
   --entity-description "emlog 是一款基于 PHP 的开源博客和内容管理系统，常用于个人博客、轻量级网站和内容发布场景，支持模板、插件和后台管理功能。" \
   --verification "验证过程显示，漏洞入口位于模板 ZIP 上传功能。攻击者在具备后台权限并获取有效 token 后，构造包含合法模板文件和路径遍历文件名的 ZIP 包上传，服务端未校验压缩包内全部文件名，解压后可将恶意 PHP 文件写入可访问目录。访问写入文件可触发代码执行，证明该漏洞可被利用。"
 ```
@@ -46,6 +47,8 @@ python3 scripts/prepare_form_context.py \
 | 字段 | 来源 | 处理规则 |
 |---|---|---|
 | `das_id` | 脚本提取 | DAS 编号 |
+| `originality` | 用户选择 | `原创` 或 `非原创`，生成 JSON 前必须确认 |
+| `is_original` | 用户选择 | `true` 表示原创，`false` 表示非原创 |
 | `title` | Word | 漏洞名称 |
 | `vuln_type` | Word + 速查表 | 用 [dropdown-options.md](dropdown-options.md) 判断级联路径 |
 | `risk_level` | Word | 空值默认 `高危` |
@@ -68,6 +71,7 @@ python3 scripts/prepare_form_context.py \
 | `dropdown_plan` | 准备阶段推断 | 第 1 页三个必填下拉框的目标值；`vuln_type_path` 为级联路径 |
 | `page_payloads` | 准备阶段组装 | 第 1/2/3 页直接填写的字段分组 |
 | `ocr` | 脚本固定值 | 验证码图片本地单次识别命令 |
+| `disclosure_report` | 脚本组装 | 非原创漏洞取得 `CNNVD-ID` 后的漏洞通报报送三页数据 |
 
 ---
 
@@ -143,7 +147,26 @@ Word 中的 `漏洞验证过程` 往往很长，可能包含图片、HTTP 报文
 
 ## 七、提交后的附件上传与钉钉通知
 
-提交成功拿到 `CNNVD-ID` 后，优先使用上传脚本作为收尾动作：
+提交成功拿到 `CNNVD-ID` 后，先判断 `form_context.json.disclosure_report.required`：
+
+- `false`：原创漏洞，直接执行附件上传、钉钉通知和汇总表同步。
+- `true`：非原创漏洞，必须先进入 `https://www.cnnvd.org.cn/backHome/vulWarnSend` 完成“漏洞通报报送”，再执行附件上传、钉钉通知和汇总表同步。
+
+非原创漏洞通报报送页面脚本：
+
+```bash
+python3 scripts/browser_snippets.py sync-disclosure-report \
+  --form-context "<form_context.json>" \
+  --cnnvd-id "<CNNVD-ID>"
+
+python3 scripts/browser_snippets.py audit-disclosure-report \
+  --form-context "<form_context.json>" \
+  --cnnvd-id "<CNNVD-ID>"
+```
+
+漏洞通报第一页上传 `disclosure_report.page1.attachment_path`。上传完成后必须执行 `audit-disclosure-report`，确认关联编号、联系人、正文和附件都已就绪。
+
+原创漏洞或非原创漏洞通报完成后，优先使用上传脚本作为收尾动作：
 
 ```bash
 python3 scripts/publish_submission_zip.py \

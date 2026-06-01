@@ -13,6 +13,15 @@ from pathlib import Path
 
 from compress_zip import ensure_submission_zip, zip_has_nested_zip
 from extract_vuln_data import DEFAULT_DATA_DIR, extract_cnnvd_data, resolve_target
+from config import (
+    get_alternate_phone,
+    get_disclosure_submitter,
+    get_disclosure_submitter_email,
+    get_disclosure_submitter_phone,
+    get_disclosure_supporter,
+    get_disclosure_supporter_email,
+    get_disclosure_supporter_phone,
+)
 
 
 DEFAULT_FORM_CONTEXT_DIR = os.environ.get(
@@ -27,6 +36,18 @@ def clip_text(text: str, max_length: int) -> str:
     if len(cleaned) <= max_length:
         return cleaned
     return cleaned[:max_length].rstrip()
+
+
+def normalize_originality(value: str) -> tuple[str, bool]:
+    """标准化原创/非原创选择。"""
+    text = (value or "").strip().lower()
+    original_values = {"原创", "是", "yes", "y", "true", "1", "original"}
+    non_original_values = {"非原创", "否", "no", "n", "false", "0", "non-original", "non_original"}
+    if text in original_values:
+        return "原创", True
+    if text in non_original_values:
+        return "非原创", False
+    raise ValueError("必须先选择原创/非原创；原创填“原创/是”，非原创填“非原创/否”。")
 
 
 def infer_entity_description(product: str, category: str, title: str) -> tuple[str, str]:
@@ -114,6 +135,85 @@ def summarize_verification(source: str, title: str, vuln_type: str) -> tuple[str
     return summary, "auto_summary"
 
 
+def html_escape(text: str) -> str:
+    """最小 HTML 转义，供 TinyMCE 内容使用。"""
+    return (
+        (text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def paragraph(label: str, value: str) -> str:
+    """生成漏洞通报正文段落，保留平台 1-9 项模板标题。"""
+    return f"<p>{html_escape(label)}：{html_escape(value or '无')}</p>"
+
+
+def build_disclosure_content(context: dict) -> str:
+    """生成非原创漏洞通报第二页正文。"""
+    product = context.get("affected_product") or context.get("title", "").split("存在", 1)[0] or "相关产品"
+    version = context.get("version") or "见通用型漏洞报送材料"
+    source = context.get("url") or "{cnnvd_id}"
+    detection = "可结合漏洞触发入口、关键参数、异常响应和业务日志特征进行检测，具体证明材料见附件。"
+    fix = context.get("fix_suggestion") or "建议关注厂商官方补丁或升级版本；无法立即升级时，应限制受影响功能访问范围并加强输入校验。"
+    return "\n".join([
+        paragraph("1、产品描述（必填）", context.get("entity_description") or f"{product} 是相关业务系统或软件组件。"),
+        paragraph("2、影响产品或组件及版本（必填）", f"{product} {version}".strip()),
+        paragraph("3、受影响资产情况（必填）", "未开展大规模互联网资产测绘，受影响范围以实际部署该产品对应版本的资产为准。"),
+        paragraph("4、受影响资产列表", "无"),
+        paragraph("5、利用过程及结果", context.get("verification") or "见通用型漏洞报送材料和附件。"),
+        paragraph("6、技术细节表述（必填）", context.get("description") or "见通用型漏洞报送材料。"),
+        paragraph("7、修补措施（必填）", fix),
+        paragraph("8、检测规则", detection),
+        paragraph("9、漏洞来源（必填）", source),
+    ])
+
+
+def build_disclosure_report(context: dict, is_original: bool) -> dict:
+    """构建非原创漏洞的通报报送上下文。"""
+    required = not is_original
+    attachment_path = context.get("submission_zip_path") or context.get("poc_file_path") or ""
+    title = context.get("title") or "漏洞通报"
+    submitter_phone = get_disclosure_submitter_phone()
+    supporter_phone = get_disclosure_supporter_phone()
+    alternate_phone = get_alternate_phone()
+    if submitter_phone and supporter_phone and submitter_phone == supporter_phone:
+        supporter_phone = alternate_phone if alternate_phone != submitter_phone else "17557289379"
+    return {
+        "required": required,
+        "reason": "非原创漏洞在取得 CNNVD 编号后还需要进入漏洞通报管理进行漏洞通报报送。" if required else "原创漏洞只执行通用型漏洞报送。",
+        "url": "https://www.cnnvd.org.cn/backHome/vulWarnSend",
+        "after_general_submit": required,
+        "cnnvd_id_placeholder": "{cnnvd_id}",
+        "page1": {
+            "related_vuln_id": "{cnnvd_id}",
+            "is_poc": "有",
+            "poc_verified": "是",
+            "is_exp": "有",
+            "exp_verified": "是",
+            "is_tool": "无",
+            "tool_verified": "否",
+            "attachment_path": attachment_path,
+            "submitter": get_disclosure_submitter(),
+            "submitter_phone": submitter_phone,
+            "submitter_email": get_disclosure_submitter_email(),
+            "supporter": get_disclosure_supporter(),
+            "supporter_phone": supporter_phone,
+            "supporter_email": get_disclosure_supporter_email(),
+            "alternate_phone": alternate_phone,
+        },
+        "page2": {
+            "warn_name": f"关于{title}的通报",
+            "enclosure_content": build_disclosure_content(context),
+        },
+        "page3": {
+            "submit_rule": "第 3 页只做最终确认和提交；如出现验证码，按 captcha-ocr.md 单次识别后立即提交。",
+        },
+    }
+
+
 def file_status(path_value: str) -> dict:
     """返回文件存在性和大小信息。"""
     path = Path(path_value) if path_value else None
@@ -182,6 +282,15 @@ def resolve_vuln_type_path(vuln_type: str) -> list[str]:
 
 def build_context(args: argparse.Namespace) -> dict:
     """构建完整 FormContext。"""
+    try:
+        originality, is_original = normalize_originality(args.originality)
+    except ValueError as exc:
+        return {
+            "error": str(exc),
+            "prompt": "生成 CNNVD form_context.json 前必须先让用户选择：原创 或 非原创。非原创会在取得 CNNVD 编号后继续生成漏洞通报报送数据。",
+            "accepted_values": ["原创", "非原创", "是", "否"],
+        }
+
     das_id, data_dir, doc_path_override = resolve_target(args.target, "CNNVD", args.data_dir)
     context = extract_cnnvd_data(das_id, data_dir, doc_path_override)
     if context.get("error"):
@@ -212,6 +321,8 @@ def build_context(args: argparse.Namespace) -> dict:
     context["generated_at"] = datetime.now().isoformat(timespec="seconds")
     context["source_target"] = args.target
     context["resolved_data_dir"] = data_dir
+    context["originality"] = originality
+    context["is_original"] = is_original
     context["entity_description"] = clip_text(entity_description, 120)
     context["entity_description_source"] = entity_description_source
     context["verification"] = clip_text(verification, 300)
@@ -283,6 +394,8 @@ def build_context(args: argparse.Namespace) -> dict:
     if not submission_zip_path:
         submission_zip_path = ensure_submission_zip(context.get("folder_path", ""))
     submission_zip_status = file_status(submission_zip_path)
+    context["submission_zip_path"] = submission_zip_path
+    context["disclosure_report"] = build_disclosure_report(context, is_original)
 
     checks = {
         "description_len_ok": len(context.get("description", "")) <= 255,
@@ -305,7 +418,6 @@ def build_context(args: argparse.Namespace) -> dict:
         ) if context.get("verification_video_path") else "",
         "upload_rule": "upload_cnnvd_attachments.py 默认会在视频超过 50MB 时自动压缩到 48MB 目标后再上传。",
     }
-    context["submission_zip_path"] = submission_zip_path
     context["submission_zip_status"] = submission_zip_status
     context["publish_checks"] = {
         "submission_zip_exists": submission_zip_status["exists"],
@@ -324,7 +436,9 @@ def build_context(args: argparse.Namespace) -> dict:
         "success_text_template": (
             f"漏洞名称：{context.get('title', '')}\\n"
             f"DAS-ID：{context.get('das_id', '')}\\n"
-            "CNNVD 编号：{cnnvd_id}"
+            "CNNVD 编号：{cnnvd_id}\\n"
+            f"原创性：{originality}\\n"
+            f"漏洞通报：{'需要' if not is_original else '不需要'}"
         ),
         "failed_title": "监管上报 CNNVD 上报失败",
     }
@@ -347,6 +461,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", default="", help="输出 form_context.json 路径；默认写入 /tmp/vulns-skills/phase2-cnnvd-report/form-contexts/YYYY-MM/DAS-ID/")
     parser.add_argument("--entity-description", default="", help="websearch 后整理的受影响实体描述")
     parser.add_argument("--verification", default="", help="根据 verification_source 总结压缩后的验证过程")
+    parser.add_argument("--originality", default="", help="必填：原创/非原创。也兼容 是/否；非原创会生成漏洞通报报送上下文。")
     return parser.parse_args()
 
 
