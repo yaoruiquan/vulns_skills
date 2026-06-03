@@ -540,6 +540,27 @@ def fill_form_script(context: dict) -> str:
       attachmentPolicy: ctx.browser_defaults?.attachment_policy || ''
     }};
   }}
+  const guidanceFailures = [];
+  const invalidGuidanceValue = (value) => {{
+    const text = String(value || '').trim();
+    return !text || ['见附件', '无', '暂无', 'N/A', 'n/a', '-', '--'].includes(text);
+  }};
+  const solutionText = ctx.formal_solution || ctx.temporary_solution || '';
+  if (invalidGuidanceValue(ctx.impact)) guidanceFailures.push('漏洞危害缺失或仍为占位值');
+  if (invalidGuidanceValue(solutionText)) guidanceFailures.push('修复方案说明缺失或仍为占位值');
+  if (guidanceFailures.length) {{
+    return {{
+      ok: false,
+      stoppedBeforeText: true,
+      reason: 'security guidance failed; impact and solution must be completed during prepare stage',
+      guidanceFailures,
+      securityGuidance: ctx.security_guidance || null,
+      results: [...phaseResults.protectedChoices],
+      phaseResults,
+      uploadZipPath: ctx.upload_zip_path,
+      attachmentPolicy: ctx.browser_defaults?.attachment_policy || ''
+    }};
+  }}
   phaseResults.dynamicChoices.push(...await fillLinkedCategoryFields());
   phaseResults.dynamicChoices.push(...await fillRemainingRequiredSelects());
   results.push(...phaseResults.protectedChoices, ...phaseResults.dynamicChoices);
@@ -550,8 +571,8 @@ def fill_form_script(context: dict) -> str:
   results.push(...await fillDynamicBinaryFields());
   results.push(setByLabel('漏洞URL', ctx.url || '见附件'));
   results.push(setByLabel('漏洞描述', ctx.description || '见附件'));
-  results.push(setByLabel('漏洞危害', ctx.impact || '见附件'));
-  results.push(setByLabel('修复方案说明', ctx.formal_solution || ctx.temporary_solution || '见附件'));
+  results.push(setByLabel('漏洞危害', ctx.impact));
+  results.push(setByLabel('修复方案说明', solutionText));
   results.push(...await fillRemainingRequiredText());
   phaseResults.text.push(...results.filter((item) => !phaseResults.protectedChoices.includes(item) && !phaseResults.dynamicChoices.includes(item)));
   const missingRequired = auditRequired();

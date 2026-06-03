@@ -38,7 +38,7 @@ MCP: list_pages
 - Word 使用 `NCC通用型漏洞报告模板.docx` 生成，信息优先来自 CNVD Word，CNVD 缺失时用 CNNVD Word 补充。
 - 原始 CNVD/CNNVD 目录不修改；已有 NCC 目录默认不覆盖，信息提取和材料整理只做一次，后续准备/上报直接复用已有 NCC 材料。
 - NCC 目录中除新生成的 NCC Word 外，其余附件和证明材料从源材料目录原样复制过去，保持相对目录结构。
-- `互联网资产证明`、`黑盒案例`、`其他受影响目标` 等材料中没有的信息填“无”；`漏洞发现时间` 使用当天日期；修复方案缺失时写入固定临时处置建议。
+- `互联网资产证明`、`黑盒案例`、`其他受影响目标` 等材料中没有的信息填“无”；`漏洞发现时间` 使用当天日期；漏洞危害/修复方案缺失时必须在准备阶段执行 `security_guidance` 检索补全，不能写“见附件”。
 
 可单独运行：
 
@@ -185,8 +185,8 @@ MCP: take_snapshot
 - 厂商国家/地区优先根据 `vendor_country` 选择，页面 label 可能是 `产品厂商归属国家及地区`、`产品厂商归属国家/地区`、`厂商所属国家及地区` 等；不要用单独的“产品厂商”宽泛匹配国家字段，无法判断时默认“中国大陆”。
 - 如果 `影响对象`、`产品厂商归属国家及地区`、`漏洞详细分类`、`修复方案` 等保护选择项任一失败，脚本必须立即停止并返回 `stoppedBeforeText=true`，禁止继续填写文本框。
 - `漏洞厂商 / 影响组件 / 影响版本 / 漏洞名称 / 漏洞 URL / 漏洞描述` 直接使用 `form_context.json` 中的固化值；描述不保留“经恒脑AI代码审计智能体分析：”前缀。
-- `漏洞危害`、`PoC`、`修复方案说明` 固定填写“见附件”。
-- `修复方案` 先选页面单选项，再把“见附件”写入说明框。
+- `漏洞危害` 使用 `form_context.json.impact`，`修复方案说明` 使用 `formal_solution` 或 `temporary_solution`；这两个字段必须在准备阶段通过 Word 字段或 `security_guidance` 检索策略补齐，禁止填写“见附件”。
+- `修复方案` 先选页面单选项，再写入准备阶段固化的修复说明。
 - 平台必填但材料缺失时暂停，不要凭空编写。
 - 推荐用 `scripts/browser_snippets.py fill-form --context <form_context.json>` 生成一次性 `evaluate_script`，脚本按 label 填写字段，避免 textarea 顺序错位。
 
@@ -407,7 +407,7 @@ python3 scripts/browser_snippets.py post-upload-audit --context "<form_context.j
 
 把输出脚本放到 MCP `evaluate_script` 执行。该脚本只处理仍为空的必填项：
 
-- 空的必填文本框/文本域填写“见附件”
+- 空的必填文本框/文本域填写“见附件”，但 `漏洞危害` 和 `修复方案说明` 例外：这两个字段必须来自准备阶段 `impact` / `formal_solution` / `temporary_solution`，为空或仍为“见附件”时停止回到 Step 1 重建 JSON。
 - 空的未知必填下拉选择“其他”
 - 空的保护下拉按 JSON 选择，例如 `漏洞业务类型=通用型漏洞`、`漏洞详细分类=<detail_category>`
 - 检查附件上传状态，返回 `attachmentUploaded`

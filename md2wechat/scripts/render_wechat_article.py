@@ -446,6 +446,91 @@ def split_sentences(text: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+GENERIC_HAZARD_MARKERS = (
+    "该产品主要使用客户行业分布广泛",
+    "漏洞危害性极高",
+    "建议客户尽快做好自查及防护",
+)
+
+
+def is_placeholder_hazard(text: str) -> bool:
+    cleaned = normalize_space(strip_markdown(text))
+    if not cleaned or cleaned in {"待确认", "未确认", "待补充", "无"}:
+        return True
+    return any(marker in cleaned for marker in GENERIC_HAZARD_MARKERS)
+
+
+def infer_product_name(title: str, overview: dict[str, str]) -> str:
+    for key in ("影响产品", "受影响产品", "产品名称", "漏洞组件", "影响组件"):
+        value = normalize_space(overview.get(key, ""))
+        if value and value not in {"待确认", "未确认", "无"}:
+            return value
+
+    cleaned = TITLE_PREFIX_PATTERN.sub("", title).strip()
+    cleaned = re.sub(r"（?CVE-\d{4}-\d{4,}）?", "", cleaned, flags=re.I).strip()
+    cleaned = re.sub(r"(?:存在|中的|的)?(?:SQL注入|XML实体注入|XXE|XSS|SSRF|CSRF|弱口令|文件上传|信息泄露|未授权访问|权限绕过|逻辑缺陷|文件包含|远程命令执行|命令执行|远程代码执行|任意代码执行|目录遍历|任意文件下载|任意文件读取|拒绝服务|反序列化|越界写入|越界读取|缓冲区溢出|二进制).*", "", cleaned, flags=re.I)
+    cleaned = cleaned.strip(" -_，,。:：")
+    return cleaned or "相关系统"
+
+
+def detect_vulnerability_category(text: str) -> str:
+    rules = [
+        ("sql", ("SQL注入", "Sql Injection", "SQL Injection", "注入数据库", "SqlValidator")),
+        ("xxe", ("XML实体注入", "XXE", "外部实体")),
+        ("xss", ("XSS", "跨站脚本", "跨站脚本攻击")),
+        ("ssrf", ("SSRF", "服务端请求伪造")),
+        ("csrf", ("CSRF", "跨站请求伪造")),
+        ("weak_password", ("弱口令", "默认口令", "默认密码")),
+        ("file_upload", ("文件上传", "上传绕过", "任意文件上传")),
+        ("info_leak", ("信息泄露", "信息泄漏", "敏感信息泄露", "数据泄露")),
+        ("unauthorized", ("未授权访问", "权限绕过", "认证绕过", "越权访问", "未授权")),
+        ("file_include", ("文件包含", "任意文件包含")),
+        ("command", ("命令执行", "远程代码执行", "任意代码执行", "代码执行", "RCE", "执行系统命令")),
+        ("path_traversal", ("目录遍历", "路径遍历")),
+        ("file_download", ("任意文件下载", "文件下载")),
+        ("file_read", ("任意文件读取", "文件读取")),
+        ("dos", ("拒绝服务", "DoS", "崩溃", "资源耗尽")),
+        ("deserialization", ("反序列化", "不安全反序列化")),
+        ("binary", ("越界写入", "越界读取", "缓冲区溢出", "整数溢出", "内存破坏", "二进制")),
+        ("logic", ("逻辑缺陷", "业务逻辑")),
+    ]
+    lowered = text.lower()
+    for category, keywords in rules:
+        for keyword in keywords:
+            if keyword.lower() in lowered:
+                return category
+    return "generic"
+
+
+def build_hazard_description(title: str, overview: dict[str, str], paragraphs: Iterable[str]) -> str:
+    context = "。".join(item for item in paragraphs if item)
+    source = "。".join([title, *[f"{key}：{value}" for key, value in overview.items() if value], context])
+    product = infer_product_name(title, overview)
+    category = detect_vulnerability_category(source)
+    templates = {
+        "sql": f"根据漏洞描述，{product}相关接口对输入参数过滤或校验不充分，攻击者可构造恶意 SQL 参数影响数据库查询逻辑。成功利用后，可能读取、篡改或删除敏感业务数据，严重时进一步扩大系统权限并影响业务连续性。",
+        "xxe": f"根据漏洞描述，{product}在处理 XML 数据时外部实体限制不严格，攻击者可构造恶意 XML 内容触发服务端解析异常。成功利用后，可能造成敏感文件读取、内网探测或服务端请求被滥用。",
+        "xss": f"根据漏洞描述，{product}对用户输入或输出内容过滤不充分，攻击者可构造恶意脚本在受害者浏览器中执行。成功利用后，可能窃取登录凭据、劫持用户会话或诱导用户执行非预期操作。",
+        "ssrf": f"根据漏洞描述，{product}相关功能对外部地址或请求目标校验不严格，攻击者可诱导服务端向指定地址发起请求。成功利用后，可能探测内网资产、访问受限服务或进一步获取敏感信息。",
+        "csrf": f"根据漏洞描述，{product}关键操作缺少有效的请求来源校验，攻击者可诱导已登录用户发起非预期请求。成功利用后，可能导致账号配置被篡改、业务数据异常变更或权限操作被冒用。",
+        "weak_password": f"根据漏洞描述，{product}存在弱口令或默认凭据风险，攻击者可通过口令猜测或直接登录获得系统访问权限。成功利用后，可能进一步查看敏感数据、修改系统配置或控制相关业务功能。",
+        "file_upload": f"根据漏洞描述，{product}文件上传功能对文件类型、内容或存储位置校验不充分，攻击者可上传恶意文件并尝试触发执行。成功利用后，可能导致 WebShell 写入、服务器被控制或业务数据泄露。",
+        "info_leak": f"根据漏洞描述，{product}在接口返回、错误信息或资源访问控制上存在缺陷，攻击者可获取不应公开的敏感信息。泄露内容可能被用于账号攻击、资产定位或后续漏洞利用，扩大整体安全风险。",
+        "unauthorized": f"根据漏洞描述，{product}相关接口或功能存在认证、鉴权校验不足的问题，攻击者可在未授权或低权限条件下访问受限资源。成功利用后，可能查看、修改敏感数据或执行越权业务操作。",
+        "file_include": f"根据漏洞描述，{product}在文件路径或包含参数处理上校验不充分，攻击者可构造特殊路径加载非预期文件。成功利用后，可能读取敏感文件、触发代码执行或破坏系统完整性。",
+        "command": f"根据漏洞描述，{product}相关功能对输入内容过滤不严格，攻击者可构造恶意请求触发命令或代码执行。成功利用后，可能接管服务器、窃取敏感数据、植入后门或造成业务服务中断。",
+        "path_traversal": f"根据漏洞描述，{product}在文件路径处理上缺少有效规范化和边界校验，攻击者可通过目录遍历访问非预期路径。成功利用后，可能读取敏感配置、凭据文件或其他关键业务数据。",
+        "file_download": f"根据漏洞描述，{product}下载功能对文件路径或资源标识校验不充分，攻击者可构造请求下载未授权文件。成功利用后，可能导致源码、配置、凭据或业务数据泄露。",
+        "file_read": f"根据漏洞描述，{product}文件读取功能对路径或权限校验不充分，攻击者可读取未授权文件内容。成功利用后，可能泄露系统配置、账号凭据、源码或其他敏感业务信息。",
+        "dos": f"根据漏洞描述，{product}在处理异常输入或特定请求时存在资源消耗或崩溃风险，攻击者可构造恶意请求触发拒绝服务。成功利用后，可能导致相关服务不可用并影响正常业务访问。",
+        "deserialization": f"根据漏洞描述，{product}在反序列化不可信数据时缺少有效校验，攻击者可构造恶意序列化对象触发异常逻辑。成功利用后，可能执行任意代码、读取敏感信息或控制受影响服务。",
+        "binary": f"根据漏洞描述，{product}在处理特定输入时存在内存安全缺陷，攻击者可构造异常数据触发越界读写、崩溃或内存破坏。成功利用后，可能导致拒绝服务、敏感信息泄露，严重时可进一步执行任意代码。",
+        "logic": f"根据漏洞描述，{product}相关业务流程存在逻辑校验缺陷，攻击者可绕过预期限制执行非授权操作。成功利用后，可能造成业务数据被篡改、权限被滥用或关键流程被破坏。",
+        "generic": f"根据漏洞描述，{product}相关功能存在安全校验不足的问题，攻击者可构造恶意请求触发非预期行为。成功利用后，可能造成敏感信息泄露、业务数据被篡改或服务可用性受影响。",
+    }
+    return templates[category]
+
+
 def infer_hazard_description(paragraphs: Iterable[str]) -> str:
     marker_re = re.compile(r"危害|高危|严重|权限提升|远程代码执行|任意代码|命令执行|信息泄露|拒绝服务|绕过|接管")
     fallback = ""
@@ -619,22 +704,22 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     vuln_info = find_section(sections, "漏洞信息")
     vuln_paragraphs = plain_paragraphs(vuln_info)
 
-    if (not overview.get("危害描述")) or overview.get("危害描述") in ("", "待确认"):
+    if is_placeholder_hazard(overview.get("危害描述", "")):
         inferred = infer_hazard_description(raw_intro + vuln_paragraphs)
-        if inferred:
+        if inferred and not is_placeholder_hazard(inferred):
             overview["危害描述"] = inferred
 
     # 从正文intro中提取漏洞描述作为危害描述（去掉"近日..."监测类前缀）
-    if ((not overview.get("危害描述")) or overview.get("危害描述") in ("", "待确认")) and raw_intro:
+    if is_placeholder_hazard(overview.get("危害描述", "")) and raw_intro:
         for p in raw_intro:
             # 提取 "技术细节及PoC已公开，" 之后的版本和影响描述
             for sep in ("技术细节及PoC已公开，", "技术细节已公开，"):
                 if sep in p:
                     desc = p.split(sep, 1)[1].strip()
-                    if desc:
+                    if desc and not is_placeholder_hazard(desc):
                         overview["危害描述"] = desc
                         break
-            if overview.get("危害描述"):
+            if not is_placeholder_hazard(overview.get("危害描述", "")):
                 break
 
     data.intro = [item for item in data.intro if not item.startswith("近日") and not item.startswith("近期")]
@@ -644,6 +729,12 @@ def parse_alert(markdown: str, source: Path) -> AlertData:
     if explicit_description:
         data.description = explicit_description
     elif not data.description and overview.get("危害描述"):
+        data.description = [overview["危害描述"]]
+
+    hazard_context = raw_intro + vuln_paragraphs + explicit_description
+    if is_placeholder_hazard(overview.get("危害描述", "")):
+        overview["危害描述"] = build_hazard_description(data.title, overview, hazard_context)
+    if data.description and all(is_placeholder_hazard(item) for item in data.description):
         data.description = [overview["危害描述"]]
 
     impact_lines = []

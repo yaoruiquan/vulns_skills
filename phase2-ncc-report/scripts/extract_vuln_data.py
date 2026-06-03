@@ -18,6 +18,7 @@ from typing import Dict, Iterable, Optional
 from docx import Document
 
 from compress_upload_zip import compress_zip_if_needed
+from web_enrichment import build_security_guidance
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -876,7 +877,10 @@ def impact_from_description(description: str) -> str:
 
 def extract_impact(fields: Dict[str, str], description: str = "") -> str:
     """优先返回可直接填表的危害摘要。"""
-    return "见附件"
+    direct = first_value(fields, "漏洞危害", "危害说明", "影响说明")
+    if direct and not is_empty_material_value(direct):
+        return clean_text_for_textarea(direct, max_chars=700)
+    return impact_from_description(description)
 
 
 def extract_impact_legacy(fields: Dict[str, str], description: str = "") -> str:
@@ -956,6 +960,16 @@ def extract_ncc_data(material_dir: Path, docx_path: Path) -> Dict[str, object]:
     url = first_value(fields, "漏洞URL", "漏洞定位")
     request_method = first_value(fields, "请求方式")
     poc_text = extract_poc_text(fields, url, request_method, detail_category)
+    guidance = build_security_guidance(
+        fields=fields,
+        title=title,
+        product=affected_product,
+        vendor=unit_name,
+        category=detail_category,
+        description=description,
+    )
+    solution_text = str(guidance.get("solution") or "")
+    solution_type = str(guidance.get("solution_type") or "临时方案")
     is_original = normalize_yes_no(first_value(fields, "是否为原创漏洞", "是否原创漏洞", "是否原创"), default="")
     is_0day = normalize_yes_no(
         first_value(fields, "是否0Day漏洞", "是否0day漏洞", "是否 0Day 漏洞", "0Day漏洞", "零日漏洞"),
@@ -990,7 +1004,8 @@ def extract_ncc_data(material_dir: Path, docx_path: Path) -> Dict[str, object]:
         "all_upload_files": attachments["all_upload_files"],
         "title": title,
         "description": description,
-        "impact": extract_impact(fields, description),
+        "impact": str(guidance.get("impact") or extract_impact(fields, description)),
+        "security_guidance": guidance,
         "vuln_type": first_value(fields, "漏洞类型"),
         "business_type": NCC_BUSINESS_TYPE,
         "detail_category": detail_category,
@@ -1007,8 +1022,9 @@ def extract_ncc_data(material_dir: Path, docx_path: Path) -> Dict[str, object]:
         "submit_org": first_value(fields, "提交机构"),
         "submit_date": first_value(fields, "提交日期"),
         "verification": clean_text_for_textarea(first_value(fields, "漏洞验证过程", "验证过程", "漏洞验证"), max_chars=800),
-        "temporary_solution": "见附件",
-        "formal_solution": "见附件",
+        "solution_type": solution_type,
+        "temporary_solution": solution_text,
+        "formal_solution": "",
         "risk_level": extract_risk_level(fields),
         "is_0day": is_0day,
         "is_original": is_original,

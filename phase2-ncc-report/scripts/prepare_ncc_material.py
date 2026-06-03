@@ -33,6 +33,7 @@ from extract_vuln_data import (
     resolve_input,
     sanitize_filename,
 )
+from web_enrichment import build_security_guidance
 
 
 DEFAULT_TEMPLATE_PATH = Path(
@@ -254,6 +255,16 @@ def solution_text(fields: Dict[str, str]) -> str:
     return "建议升级至官方修复版本；如暂无补丁，临时限制相关接口访问并加强输入校验。"
 
 
+def needs_guidance_update(docx_path: Path) -> bool:
+    """已有 NCC Word 缺少危害/修复方案时允许准备阶段补齐。"""
+    if not docx_path.exists():
+        return True
+    fields = extract_fields_from_docx(docx_path)
+    impact = first_value(fields, "漏洞危害", "危害说明", "影响说明")
+    solution = first_value(fields, "修复方案", "临时解决方案", "正式解决方案", "修复建议", "解决方案")
+    return not valid_value(impact) or not valid_value(solution)
+
+
 def split_verification(fields: Dict[str, str]) -> tuple[str, str]:
     """把验证过程拆成环境搭建和触发操作，无法拆分时保守填充。"""
     text = first_clean_value(fields, "漏洞验证过程", "验证过程", "漏洞验证", "漏洞分析", max_chars=1600)
@@ -280,13 +291,21 @@ def build_report_values(fields: Dict[str, str], source_dir: Path) -> Dict[str, s
     clean_product = product_without_version(product, version)
     product_version = dedupe_product_version(product, version)
     poc = first_clean_value(fields, "漏洞验证过程", "验证过程", "漏洞验证", "漏洞分析", max_chars=1600)
+    guidance = build_security_guidance(
+        fields=fields,
+        title=report_title,
+        product=product,
+        vendor=unit_name,
+        category=detail_category,
+        description=description,
+    )
     return {
         "title": report_title,
         "discovery_date": datetime.now().strftime("%Y年%m月%d日"),
         "detail_category": detail_category or paragraph_value(first_value(fields, "漏洞类型"), "其他"),
         "description_intro": product_intro(unit_name, clean_product),
         "description": paragraph_value(description),
-        "impact": impact_text(fields, description, detail_category),
+        "impact": str(guidance.get("impact") or impact_text(fields, description, detail_category)),
         "unit_name": paragraph_value(unit_name),
         "product_version": paragraph_value(product_version, "暂未明确"),
         "asset_query": "无",
@@ -299,7 +318,8 @@ def build_report_values(fields: Dict[str, str], source_dir: Path) -> Dict[str, s
         "reproduce_note": "无",
         "blackbox_cases": "无",
         "affected_targets": "无",
-        "solution": solution_text(fields),
+        "solution": str(guidance.get("solution") or solution_text(fields)),
+        "security_guidance": guidance,
         "remark": "本材料由 CNVD/CNNVD 原始材料整理生成，证明材料见附件。",
     }
 
@@ -387,10 +407,16 @@ def prepare_ncc_material(
     target_path = Path(target).expanduser()
     das_root, source_dir, source_docx = resolve_das_root(target_path, prefer_source)
     if detect_material_source(source_dir) == "NCC" and source_docx.exists() and not force:
+        updated_existing = False
+        if template_path.exists() and needs_guidance_update(source_docx):
+            values = build_report_values(extract_fields_from_docx(source_docx), source_dir)
+            fill_template(template_path, source_docx, values)
+            updated_existing = True
         return {
             "ok": True,
             "created": False,
-            "reason": "already NCC material",
+            "updated_existing": updated_existing,
+            "reason": "already NCC material; guidance fields updated" if updated_existing else "already NCC material",
             "das_root": str(das_root),
             "source_dir": str(source_dir),
             "source_docx": str(source_docx),
@@ -412,10 +438,15 @@ def prepare_ncc_material(
     if ncc_dir.exists() and not force:
         existing_docx = find_preferred_docx(ncc_dir)
         if existing_docx:
+            updated_existing = False
+            if needs_guidance_update(existing_docx):
+                fill_template(template_path, existing_docx, values)
+                updated_existing = True
             return {
                 "ok": True,
                 "created": False,
-                "reason": "NCC material exists",
+                "updated_existing": updated_existing,
+                "reason": "NCC material exists; guidance fields updated" if updated_existing else "NCC material exists",
                 "das_root": str(das_root),
                 "source_dir": str(source_dir),
                 "source_docx": str(source_docx),
@@ -423,6 +454,7 @@ def prepare_ncc_material(
                 "cnnvd_docx": str(cnnvd_docx or ""),
                 "ncc_dir": str(ncc_dir),
                 "ncc_docx": str(existing_docx),
+                "values": values if updated_existing else {},
             }
         raise SystemExit(f"NCC 材料目录已存在但缺少 docx，请检查或使用 --force: {ncc_dir}")
 

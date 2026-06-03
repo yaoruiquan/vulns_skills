@@ -40,6 +40,7 @@ description: 将漏洞预警 Markdown 转换为安恒公众号风格 HTML，生�
    ```
 
 3. 普通漏洞预警会解析标题、漏洞概述表、修复方案、参考资料、产品能力覆盖，并填充 `assets/wechat-alert-article-template.placeholders.html`。微软月度通报会解析安全通告、漏洞速览表、严重漏洞表、漏洞详情、修复方案和参考资料，并填充 `assets/wechat-microsoft-monthly-template.placeholders.html`。两类输出都会在 HTML 旁生成 `<html>.meta.json`，用于草稿标题、作者和摘要元数据。
+   - 普通漏洞预警的“危害描述”必须来自 Markdown 中的具体漏洞描述/漏洞类型推导；不得使用“该产品主要使用客户行业分布广泛，漏洞危害性极高，建议客户尽快做好自查及防护。”这类固定泛化句。
 4. 校验 HTML：不得包含 `<style>`、`<script>`、`class=`、`contenteditable=`、`ProseMirror`、微信后台页面壳或旧漏洞内容；样式必须以内联 `style` 为主。
 5. 生成封面。默认使用 PPTX 模版：
 
