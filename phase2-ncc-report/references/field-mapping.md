@@ -41,7 +41,7 @@
 | `version` | `影响版本`、`受影响实体版本号`、`版本号` | 对应页面“影响版本”；会从“已在 1.3.20 版本复现”中提取 `1.3.20` |
 | `url` | `漏洞URL`、`漏洞定位` | 对应页面“漏洞 URL” |
 | `verification` | `漏洞验证过程`、`验证过程`、`漏洞验证` | 可作为补充说明 |
-| `poc_text` | `SQL注入Poc`、`完整PoC描述`、`漏洞验证过程` | 仅 `detail_category=SQL注入` 时提取 Word 中已有的原始 HTTP 请求或 curl 命令并写入 CodeMirror；没有现成 PoC 时返回“见附件”，禁止根据 URL/请求方式/漏洞分析自动拼接 |
+| `poc_text` | `SQL注入Poc`、`完整PoC描述`、`漏洞验证过程` | 仅 `detail_category=SQL注入` 时提取 Word 中已有的原始 HTTP 请求或 curl 命令并写入 CodeMirror；原始 HTTP 请求必须保持 `GET /path HTTP/1.1` + 多行 Header 的格式，脚本会修复 Word 提取造成的 `HTTP/1.1Host:`、`Host:... User-Agent:` 等换行丢失；没有现成 PoC 时返回“见附件”，禁止根据 URL/请求方式/漏洞分析自动拼接 |
 | `temporary_solution` | `临时解决方案` 或准备阶段 websearch 补全 | 对应“修复方案说明”候选内容，禁止填写“见附件” |
 | `formal_solution` | `正式解决方案`、`修复方案` | 对应“修复方案说明”候选内容 |
 | `security_guidance` | 准备阶段检索策略 | 记录漏洞危害/修复方案的来源、查询词、检索结果和兜底策略 |
@@ -186,7 +186,7 @@
 - 联动下拉（类型、中间件/框架）统一选"其他"
 - 命令执行的"类型"和"中间件/框架"必须选中并回读成功，不能因字段延迟渲染或当前值为"请选择类型"而跳过
 - 联动文本框/文本域（利用工具、PoC、触发位置、触发过程、poc、触发xss的payload、弱口令账号/密码）统一填"见附件"
-- SQL注入Poc radio 按材料实际情况选 get/post；下方真实 PoC 内容框是 CodeMirror，必须用 `document.querySelector('.CodeMirror').CodeMirror.setValue(poc_text)` 写入从 Word 提取的原始 HTTP 请求或 curl 命令。没有现成 PoC 时填“见附件”，不要自动构造请求体。
+- SQL注入Poc radio 按材料实际情况选 get/post；下方真实 PoC 内容框是 CodeMirror，必须用 `document.querySelector('.CodeMirror').CodeMirror.setValue(poc_text)` 写入从 Word 提取的原始 HTTP 请求或 curl 命令。HTTP 请求示例格式：第一行为 `GET /path HTTP/1.1` 或 `POST /path HTTP/1.1`，后续逐行填写 `Host: example.com`、`User-Agent: ...`、`Accept-Encoding: gzip, deflate`、`Connection: close` 等 Header。没有现成 PoC 时填“见附件”，不要自动构造请求体。
 - **二进制** 选完后漏洞URL会被隐藏，不需也不应填写；版本号填具体版本，触发位置和PoC填"见附件"
 
 ## 8. 不要硬填的内容

@@ -887,10 +887,68 @@ def text_block_to_html(block: str) -> str:
     if all(re.match(r"^\s*[-*]\s+", line) for line in lines if line.strip()):
         items = [re.sub(r"^\s*[-*]\s+", "", line).strip() for line in lines if line.strip()]
         return unordered_list(items)
-    if all(re.match(r"^\s*\d+\.\s+", line) for line in lines if line.strip()):
-        items = [re.sub(r"^\s*\d+\.\s+", "", line).strip() for line in lines if line.strip()]
+    inline_list = inline_numbered_block_to_html(block)
+    if inline_list:
+        return inline_list
+    if all(re.match(r"^\s*\d+[.、．]\s*", line) for line in lines if line.strip()):
+        items = [re.sub(r"^\s*\d+[.、．]\s*", "", line).strip() for line in lines if line.strip()]
         return ordered_list(items)
     return paragraph(strip_markdown(block))
+
+
+def split_inline_marker_items(text: str, marker: str) -> list[str]:
+    """Split compact inline numbered text while avoiding version numbers."""
+    matches = list(re.finditer(marker, text))
+    if len(matches) < 2:
+        return []
+    items: list[str] = []
+    for index, match in enumerate(matches):
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        item = text[start:end].strip()
+        if strip_markdown(item):
+            items.append(item)
+    return items
+
+
+def split_general_advice(text: str) -> tuple[str, str, str]:
+    match = re.search(r"\s*(通用建议)\s*[:：]\s*", text)
+    if not match:
+        return text, "", ""
+    before = text[: match.start()].strip()
+    label = f"{match.group(1)}："
+    after = text[match.end() :].strip()
+    return before, label, after
+
+
+def inline_numbered_block_to_html(block: str) -> str:
+    compact = normalize_space(block)
+    main_items = split_inline_marker_items(compact, r"(?<!\S)\d{1,2}[.、．]\s*(?!\d)")
+    if not main_items:
+        return ""
+
+    rendered: list[str] = []
+    advice_label = ""
+    advice_body = ""
+    cleaned_items: list[str] = []
+    for item in main_items:
+        before, label, after = split_general_advice(item)
+        if before:
+            cleaned_items.append(before)
+        if label:
+            advice_label = label
+            advice_body = after
+    list_html = ordered_list(cleaned_items)
+    if list_html:
+        rendered.append(list_html)
+    if advice_label:
+        rendered.append(paragraph(advice_label))
+        advice_items = split_inline_marker_items(advice_body, r"(?<!\S)[(（]\d{1,2}[)）]\s*")
+        if advice_items:
+            rendered.append(ordered_list(advice_items))
+        elif strip_markdown(advice_body):
+            rendered.append(paragraph(strip_markdown(advice_body)))
+    return "\n".join(part for part in rendered if part)
 
 
 def mixed_block_to_html(block: str) -> str:
@@ -942,17 +1000,25 @@ def blocks_html(blocks: Iterable[str]) -> str:
 
 
 def unordered_list(items: Iterable[str]) -> str:
-    lis = "\n".join(
-        f'<li style="margin:0 0 6px 0;color:#3e3e3e;">{escape(strip_markdown(item))}</li>' for item in items if strip_markdown(item)
+    """Convert items to manual bullet list (avoid WeChat editor <ul> bugs)."""
+    ps = "\n".join(
+        f'<p style="margin:0 0 6px 0;color:#3e3e3e;font-size:15px;line-height:1.9;padding-left:2em;text-indent:-2em;">• {escape(strip_markdown(item))}</p>'
+        for item in items if strip_markdown(item)
     )
-    return f'<ul style="margin:8px 0 14px 0;padding-left:20px;color:#3e3e3e;font-size:15px;line-height:1.9;">{lis}</ul>'
+    if not ps:
+        return ""
+    return f'<section style="font-size:15px;line-height:1.9;color:#3e3e3e;">{ps}</section>'
 
 
 def ordered_list(items: Iterable[str]) -> str:
-    lis = "\n".join(
-        f'<li style="margin:0 0 6px 0;color:#3e3e3e;">{escape(strip_markdown(item))}</li>' for item in items if strip_markdown(item)
+    """Convert items to manual numbered list (avoid WeChat editor <ol> bugs)."""
+    ps = "\n".join(
+        f'<p style="margin:0 0 6px 0;color:#3e3e3e;font-size:15px;line-height:1.9;padding-left:2em;text-indent:-2em;">{i}. {escape(strip_markdown(item))}</p>'
+        for i, item in enumerate(items, 1) if strip_markdown(item)
     )
-    return f'<ol style="margin:8px 0 14px 0;padding-left:20px;color:#3e3e3e;font-size:15px;line-height:1.9;">{lis}</ol>'
+    if not ps:
+        return ""
+    return f'<section style="font-size:15px;line-height:1.9;color:#3e3e3e;">{ps}</section>'
 
 
 def section_title(title: str) -> str:
@@ -1036,36 +1102,20 @@ def render_reproduction(note: str) -> str:
 def image_to_base64_html(image_path: Path) -> str:
     """Convert an image file to a base64-encoded HTML img tag for WeChat.
 
-    Images are resized to max 578px width and compressed to JPEG quality 80
-    to stay within WeChat's content size limit.
+    The original file bytes are embedded directly. Display size is constrained
+    with CSS only, so screenshots are not resized or recompressed here.
     """
-    from PIL import Image as PILImage
-    import io
-
-    try:
-        img = PILImage.open(image_path)
-        orig_w, orig_h = img.size
-        max_w = 578
-        if orig_w > max_w:
-            ratio = max_w / orig_w
-            new_w = max_w
-            new_h = int(orig_h * ratio)
-            img = img.resize((new_w, new_h), PILImage.LANCZOS)
-
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=80, optimize=True)
-        encoded = base64.b64encode(buf.getvalue()).decode()
-        mime = "image/jpeg"
-    except ImportError:
-        with open(image_path, "rb") as fh:
-            encoded = base64.b64encode(fh.read()).decode()
-        ext = image_path.suffix.lower().lstrip(".")
-        mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                    "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp"}
-        mime = mime_map.get(ext, "image/png")
+    encoded = base64.b64encode(image_path.read_bytes()).decode()
+    ext = image_path.suffix.lower().lstrip(".")
+    mime_map = {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "webp": "image/webp",
+        "gif": "image/gif",
+        "bmp": "image/bmp",
+    }
+    mime = mime_map.get(ext, "application/octet-stream")
 
     alt = escape(image_path.stem)
     return (
@@ -1531,7 +1581,7 @@ def main() -> int:
             "success": True,
             "output": str(args.output),
             "title": data.title,
-            "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+            "author": "",
             "digest": digest,
             "article_type": article_type,
             "references": len(data.references),
@@ -1548,7 +1598,7 @@ def main() -> int:
             "success": True,
             "output": str(args.output),
             "title": data.title,
-            "author": os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+            "author": "",
             "digest": (data.overview.get("危害描述") or data.title)[:120],
             "article_type": article_type,
             "references": len(data.references),

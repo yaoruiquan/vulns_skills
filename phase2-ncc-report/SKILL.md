@@ -43,6 +43,11 @@ vim .env
 | `NCC_UPLOAD_MAX_MB` | NCC 附件大小限制，单位 MiB | `50` |
 | `NCC_VIDEO_COMPRESS_ENABLED` | 上传 zip 超限时是否用 ffmpeg 压缩包内视频 | `true` |
 | `NCC_FFMPEG_BIN` | ffmpeg 可执行文件路径或命令名 | `ffmpeg` |
+| `FOFA_API_ENABLED` | 是否启用 FOFA API 查询 `size`；默认使用 FOFA Web + Chrome DevTools MCP | `false` |
+| `FOFA_API_KEY` | FOFA API key，可选；仅 `FOFA_API_ENABLED=true` 时使用 | 空 |
+| `FOFA_SCREENSHOT_DIR` | FOFA Web 页面截图默认目录 | `/tmp/vulns-skills/phase2-ncc-report/fofa-screenshots` |
+| `FOFA_USE_LATEST_SCREENSHOT` | 未显式传截图时是否自动使用默认目录最新截图 | `true` |
+| `FOFA_ALLOW_UNMATCHED_LATEST_SCREENSHOT` | 准备阶段无文件名匹配时是否允许直接取最新截图 | `false` |
 
 兼容旧变量 `CLAUDE_CHROME_MCP_PORT` 和 `CLAUDE_CHROME_PROFILE_NAME`，但新配置优先使用 `CHROME_DEBUG_PORT` 和 `CHROME_PROFILE_NAME`。
 
@@ -128,6 +133,7 @@ claude mcp get ncc-chrome
 | `scripts/prepare_ncc_material.py` | 上报前根据 CNVD/CNNVD Word 生成 `NCC-<漏洞名>` 材料目录和 NCC 通用型漏洞报告 Word |
 | `scripts/prepare_form_context.py` | 生成浏览器填表阶段唯一读取的 NCC `form_context.json` |
 | `scripts/web_enrichment.py` | 信息收集阶段补全 `漏洞危害` 和 `修复方案`：Word 缺失时先 websearch，再按漏洞类型策略兜底 |
+| `scripts/fofa_assets.py` | 根据产品名/厂商生成 FOFA Web 查询 URL 和 MCP 页面提取脚本，并将 Chrome DevTools MCP 截图/资产数量回填到 NCC Word |
 | `scripts/resolve_upload_path.py` | 上传前从 `form_context.json` 校验并输出真实 `upload_zip_path`，诊断手敲文件名错误 |
 | `scripts/browser_snippets.py` | 根据 `form_context.json` 输出 NCC 页面可执行的填表、上传后漏填检查 `evaluate_script` 片段 |
 | `scripts/captcha_ocr.py` | 验证码 OCR |
@@ -156,6 +162,7 @@ claude mcp get ncc-chrome
 - Step 1 必须先生成 `/tmp/vulns-skills/phase2-ncc-report/form-contexts/.../form_context.json`；浏览器阶段只读这个文件，不再运行 Word 提取或 NCC 材料生成脚本。
 - Step 1 生成任何材料或 JSON 前，必须先向用户确认一次“是否0Day漏洞/是否原创漏洞”的绑定值。二者绑定：是都为是，否都为否。`prepare_form_context.py` 和单独运行的 `prepare_ncc_material.py` 都优先使用 `--is-0day-original 是/否`；兼容旧参数 `--is-0day`、`--is-original`，但旧参数必须一致；不得从 Word 字段或 `.env` 兜底猜测。
 - Step 1 信息收集阶段必须补齐 `impact` 和 `temporary_solution/formal_solution`。Word 没有有效“漏洞危害/修复方案”时，`web_enrichment.py` 会按标题、产品、厂商和漏洞详细分类执行 websearch，并把查询词、结果、来源写入 `security_guidance`；检索失败时按漏洞类型策略生成保守文本。浏览器阶段禁止把这两个字段填成“见附件”。
+- Step 1 会根据产品名/厂商生成不含“or”的 FOFA 测绘语句和 FOFA Web 查询 URL；查询语法按精确度优先级生成：`app="<产品>"`、`product="<产品>"`、`title="<产品>"`、`header="<产品>"`、`"<产品>"`、`body="<产品>"`，不会因为 `body="Apache"` / `body="Apple"` 这类宽泛语句数量更大就选它。截图直接使用原生 Chrome DevTools MCP。流程是：打开 `fofa_assets.py generate` 输出的 `web_url`，需要登录时人工微信扫码，执行输出的 `mcp_extract_script` 提取资产数量和 `has_results`，只有 `has_results=true` 时才使用 MCP `take_screenshot` 截图并回填 Word；回填命令必须带 `--has-results true/false`。`has_results=false`、`no_result=true`、`asset_count=0` 或未识别数量时，资产数量写“未检索到互联网资产/待回填”，截图写“无”，不得保留空结果页截图。截图文件名建议包含产品名或 DAS-ID；准备阶段优先匹配截图文件名，避免把其他漏洞的最新截图写入 Word，`apply` 未传 `--screenshot-path` 时才允许用最新截图兜底。若配置 `FOFA_API_ENABLED=true` 和 `FOFA_API_KEY`，也可用 API 的 `size` 作为是否有结果的依据：`size>0` 表示可保留截图，`size=0` 表示不保留截图。
 - Step 6 是硬性提交 gate：附件上传后必须执行 `post-upload-audit`，返回 `ok=true`、`missingRequired=[]`、`skippedProtected=[]`、`attachmentUploaded=true`、`exactAttachmentMatch=true`、`uploadErrors=[]` 才能点击提交。
 - 钉钉通知是可选收尾动作；`--text` 中的字面量 `\n` 会被脚本转换为真实换行。
 - 上传附件前必须用 `resolve_upload_path.py --context <form_context.json>` 读取真实 `filePath`；批量处理前必须用 `resolve_upload_path.py --batch-root <form_context父目录>` 扫描整批；不要手动把漏洞名里的空格改成短横线或重新拼 zip 文件名。

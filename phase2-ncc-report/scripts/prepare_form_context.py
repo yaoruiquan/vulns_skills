@@ -96,6 +96,12 @@ def build_context(args: argparse.Namespace) -> dict:
             "browser_phase_rule": "浏览器阶段只能读取本 form_context.json；NCC Word 材料只在准备阶段生成，浏览器阶段禁止重新运行 Word 提取脚本。",
         }
     )
+    material_values = ncc_material_result.get("values") if isinstance(ncc_material_result, dict) else {}
+    if isinstance(material_values, dict) and material_values.get("asset_evidence"):
+        context["asset_evidence"] = material_values.get("asset_evidence")
+        context["asset_query"] = material_values.get("asset_query", "")
+        context["asset_count"] = material_values.get("asset_count", "")
+        context["asset_screenshot_path"] = material_values.get("asset_screenshot_path", "")
     return context
 
 

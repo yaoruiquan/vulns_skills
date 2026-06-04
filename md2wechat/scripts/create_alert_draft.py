@@ -119,7 +119,7 @@ def build_draft(html_file: Path, cover_image: Path, metadata_file: Path, draft_j
     media_id = upload_cover(cover_image, token)
     article = {
         "title": metadata.get("title") or html_file.stem,
-        "author": metadata.get("author") or os.environ.get("WECHAT_AUTHOR", "安恒CERT"),
+        "author": metadata["author"] if "author" in metadata and metadata["author"] else os.environ.get("WECHAT_AUTHOR", ""),
         "digest": (metadata.get("digest") or metadata.get("title") or html_file.stem)[:120],
         "content": content,
         "content_source_url": "",

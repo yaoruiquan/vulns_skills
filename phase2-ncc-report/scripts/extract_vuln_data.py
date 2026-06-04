@@ -63,6 +63,22 @@ SCREENSHOT_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 YES_VALUES = {"是", "yes", "y", "true", "1", "对", "有"}
 NO_VALUES = {"否", "no", "n", "false", "0", "不", "无"}
+HTTP_HEADER_NAMES = (
+    "Host",
+    "User-Agent",
+    "Accept-Encoding",
+    "Accept-Language",
+    "Accept",
+    "Connection",
+    "Content-Type",
+    "Content-Length",
+    "Cookie",
+    "Authorization",
+    "Referer",
+    "Origin",
+    "X-Forwarded-For",
+    "X-Requested-With",
+)
 NCC_BUSINESS_TYPE = "通用型漏洞"
 NCC_TARGET_TYPE_OPTIONS = (
     "操作系统",
@@ -608,16 +624,47 @@ def classify_detail(fields: Dict[str, str], title: str, description: str) -> str
     return "其他"
 
 
+def normalize_http_request_text(text: str) -> str:
+    """修复 Word 提取后换行丢失的原始 HTTP 请求。"""
+    raw = normalize_text(text).replace("\r\n", "\n").replace("\r", "\n")
+    if not raw:
+        return ""
+
+    header_pattern = "|".join(re.escape(header) for header in HTTP_HEADER_NAMES)
+    raw = re.sub(
+        rf"(HTTP/\d(?:\.\d)?)(?=(?:{header_pattern})\s*:)",
+        r"\1\n",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    raw = re.sub(
+        rf"(?<!^)(?<!\n)(?<![\w-])({header_pattern})\s*:",
+        lambda match: "\n" + match.group(1) + ":",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    raw = raw.replace("，", ",")
+    raw = re.sub(r",\s*", ", ", raw)
+    raw = re.sub(r";\s*(?=(?:q=)?\d+\.\d+\b)", r"; ", raw)
+    return raw
+
+
 def extract_http_request_block(text: str) -> str:
     """从材料文本中提取原始 HTTP 请求块。"""
-    raw = normalize_text(text)
+    raw = normalize_http_request_text(text)
     if not raw:
         return ""
     lines = raw.splitlines()
     start_index = -1
     request_line_re = re.compile(r"^\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+.+\s+HTTP/\d(?:\.\d)?\s*$", re.I)
+    request_line_search_re = re.compile(r"\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\S+\s+HTTP/\d(?:\.\d)?\b.*$", re.I)
     for index, line in enumerate(lines):
         if request_line_re.match(line):
+            start_index = index
+            break
+        match = request_line_search_re.search(line)
+        if match:
+            lines[index] = line[match.start() :]
             start_index = index
             break
     if start_index < 0:
@@ -640,7 +687,14 @@ def extract_http_request_block(text: str) -> str:
         collected.append(line.rstrip())
         if len("\n".join(collected)) > 5000:
             break
-    return "\n".join(collected).strip()
+    formatted: list[str] = []
+    for line in collected:
+        header_match = re.match(r"^([A-Za-z0-9-]+):\s*(.*)$", line.strip())
+        if header_match:
+            formatted.append(f"{header_match.group(1)}: {header_match.group(2).strip()}")
+        else:
+            formatted.append(line.rstrip())
+    return "\n".join(formatted).strip()
 
 
 def extract_curl_command_block(text: str) -> str:

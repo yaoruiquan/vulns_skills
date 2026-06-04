@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from docx import Document
+from docx.shared import Cm
 
 from extract_vuln_data import (
     DEFAULT_DATA_DIR,
@@ -33,6 +34,7 @@ from extract_vuln_data import (
     resolve_input,
     sanitize_filename,
 )
+from fofa_assets import build_asset_evidence
 from web_enrichment import build_security_guidance
 
 
@@ -235,6 +237,29 @@ def product_intro(unit_name: str, product: str) -> str:
     return f"{product_name} 是 {vendor} 相关的软件或系统组件，具体产品形态及部署环境以附件证明材料为准。"
 
 
+def build_asset_values(product: str, unit_name: str, title: str) -> Dict[str, str]:
+    """生成 FOFA 测绘语法、资产数量和截图路径。"""
+    evidence = build_asset_evidence(product=product, vendor=unit_name, title=title)
+    query = normalize_text(str(evidence.get("query") or ""))
+    count = normalize_text(str(evidence.get("asset_count") or ""))
+    asset_has_results = bool(evidence.get("asset_has_results") or evidence.get("asset_valid"))
+    screenshot = evidence.get("screenshot") if isinstance(evidence.get("screenshot"), dict) else {}
+    screenshot_path = normalize_text(str(screenshot.get("path") or "")) if screenshot.get("ok") else ""
+    if count and count != "无" and asset_has_results:
+        count_text = f"通过 FOFA 测绘查询，返回互联网资产数量 size={count}。"
+    elif count and count != "无":
+        count_text = f"未检索到互联网资产（FOFA 返回 size={count}）。"
+    else:
+        count_text = "待通过 FOFA Web 查询后回填。"
+    return {
+        "asset_query": query or "无",
+        "asset_count": count_text,
+        "asset_screenshot": "FOFA 查询结果截图如下。" if screenshot_path and asset_has_results else "无" if count else "待通过 FOFA Web 查询后回填。",
+        "asset_screenshot_path": screenshot_path if asset_has_results else "",
+        "asset_evidence": evidence,
+    }
+
+
 def impact_text(fields: Dict[str, str], description: str, detail_category: str) -> str:
     """提炼漏洞危害，缺失时给出保守描述。"""
     direct = first_value(fields, "漏洞危害")
@@ -263,6 +288,31 @@ def needs_guidance_update(docx_path: Path) -> bool:
     impact = first_value(fields, "漏洞危害", "危害说明", "影响说明")
     solution = first_value(fields, "修复方案", "临时解决方案", "正式解决方案", "修复建议", "解决方案")
     return not valid_value(impact) or not valid_value(solution)
+
+
+def needs_asset_update(docx_path: Path) -> bool:
+    """已有 NCC Word 资产证明还是模板/空值时允许准备阶段刷新。"""
+    if not docx_path.exists():
+        return True
+    doc = Document(str(docx_path))
+    checks = {
+        "query": False,
+        "count": False,
+        "screenshot": False,
+    }
+    screenshot_has_image = False
+    for paragraph in doc.paragraphs:
+        text = normalize_text(paragraph.text)
+        if text.startswith("1）精准测绘语法"):
+            checks["query"] = valid_value(text.split("：", 1)[-1] if "：" in text else text)
+        elif text.startswith("2）互联网影响资产数量"):
+            value = text.split("：", 1)[-1] if "：" in text else text
+            checks["count"] = valid_value(value) and "待通过" not in value and "未获取" not in value
+        elif text.startswith("3）测绘平台截图"):
+            value = text.split("：", 1)[-1] if "：" in text else text
+            checks["screenshot"] = valid_value(value) and value != "无"
+            screenshot_has_image = any(run.element.xpath(".//pic:pic") for run in paragraph.runs)
+    return not checks["query"] or not checks["count"] or not checks["screenshot"] or not screenshot_has_image
 
 
 def split_verification(fields: Dict[str, str]) -> tuple[str, str]:
@@ -299,6 +349,7 @@ def build_report_values(fields: Dict[str, str], source_dir: Path) -> Dict[str, s
         category=detail_category,
         description=description,
     )
+    asset_values = build_asset_values(clean_product or product, unit_name, report_title)
     return {
         "title": report_title,
         "discovery_date": datetime.now().strftime("%Y年%m月%d日"),
@@ -308,9 +359,11 @@ def build_report_values(fields: Dict[str, str], source_dir: Path) -> Dict[str, s
         "impact": str(guidance.get("impact") or impact_text(fields, description, detail_category)),
         "unit_name": paragraph_value(unit_name),
         "product_version": paragraph_value(product_version, "暂未明确"),
-        "asset_query": "无",
-        "asset_count": "无",
-        "asset_screenshot": "无",
+        "asset_query": asset_values["asset_query"],
+        "asset_count": asset_values["asset_count"],
+        "asset_screenshot": asset_values["asset_screenshot"],
+        "asset_screenshot_path": asset_values["asset_screenshot_path"],
+        "asset_evidence": asset_values["asset_evidence"],
         "poc": paragraph_value(poc, "见附件"),
         "trigger_condition": paragraph_value(trigger_condition, "见附件"),
         "environment": paragraph_value(env_text, "见附件"),
@@ -355,6 +408,11 @@ def fill_template(template_path: Path, output_path: Path, values: Dict[str, str]
     replace_paragraph_body(paragraphs[20], f"1）精准测绘语法：{values['asset_query']}", format_run=body_run)
     replace_paragraph_body(paragraphs[22], f"2）互联网影响资产数量：{values['asset_count']}", format_run=body_run)
     replace_paragraph_body(paragraphs[24], f"3）测绘平台截图：{values['asset_screenshot']}", format_run=body_run)
+    screenshot_path = Path(str(values.get("asset_screenshot_path") or "")).expanduser()
+    if screenshot_path.is_file():
+        run = paragraphs[24].add_run()
+        run.add_break()
+        run.add_picture(str(screenshot_path), width=Cm(15))
 
     replace_paragraph_body(paragraphs[32], values["poc"], format_run=body_run)
     for index in (33, 34, 35, 36, 37):
@@ -408,15 +466,26 @@ def prepare_ncc_material(
     das_root, source_dir, source_docx = resolve_das_root(target_path, prefer_source)
     if detect_material_source(source_dir) == "NCC" and source_docx.exists() and not force:
         updated_existing = False
-        if template_path.exists() and needs_guidance_update(source_docx):
+        refresh_guidance = needs_guidance_update(source_docx)
+        refresh_assets = needs_asset_update(source_docx)
+        if template_path.exists() and (refresh_guidance or refresh_assets):
             values = build_report_values(extract_fields_from_docx(source_docx), source_dir)
             fill_template(template_path, source_docx, values)
             updated_existing = True
+            reason = "already NCC material; refreshed"
+            if refresh_guidance and refresh_assets:
+                reason = "already NCC material; guidance and FOFA asset fields refreshed"
+            elif refresh_guidance:
+                reason = "already NCC material; guidance fields refreshed"
+            elif refresh_assets:
+                reason = "already NCC material; FOFA asset fields refreshed"
+        else:
+            reason = "already NCC material"
         return {
             "ok": True,
             "created": False,
             "updated_existing": updated_existing,
-            "reason": "already NCC material; guidance fields updated" if updated_existing else "already NCC material",
+            "reason": reason,
             "das_root": str(das_root),
             "source_dir": str(source_dir),
             "source_docx": str(source_docx),
@@ -439,14 +508,25 @@ def prepare_ncc_material(
         existing_docx = find_preferred_docx(ncc_dir)
         if existing_docx:
             updated_existing = False
-            if needs_guidance_update(existing_docx):
+            refresh_guidance = needs_guidance_update(existing_docx)
+            refresh_assets = needs_asset_update(existing_docx)
+            if refresh_guidance or refresh_assets:
                 fill_template(template_path, existing_docx, values)
                 updated_existing = True
+                reason = "NCC material exists; refreshed"
+                if refresh_guidance and refresh_assets:
+                    reason = "NCC material exists; guidance and FOFA asset fields refreshed"
+                elif refresh_guidance:
+                    reason = "NCC material exists; guidance fields refreshed"
+                elif refresh_assets:
+                    reason = "NCC material exists; FOFA asset fields refreshed"
+            else:
+                reason = "NCC material exists"
             return {
                 "ok": True,
                 "created": False,
                 "updated_existing": updated_existing,
-                "reason": "NCC material exists; guidance fields updated" if updated_existing else "NCC material exists",
+                "reason": reason,
                 "das_root": str(das_root),
                 "source_dir": str(source_dir),
                 "source_docx": str(source_docx),

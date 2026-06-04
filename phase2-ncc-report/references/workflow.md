@@ -39,6 +39,7 @@ MCP: list_pages
 - 原始 CNVD/CNNVD 目录不修改；已有 NCC 目录默认不覆盖，信息提取和材料整理只做一次，后续准备/上报直接复用已有 NCC 材料。
 - NCC 目录中除新生成的 NCC Word 外，其余附件和证明材料从源材料目录原样复制过去，保持相对目录结构。
 - `互联网资产证明`、`黑盒案例`、`其他受影响目标` 等材料中没有的信息填“无”；`漏洞发现时间` 使用当天日期；漏洞危害/修复方案缺失时必须在准备阶段执行 `security_guidance` 检索补全，不能写“见附件”。
+- `互联网资产证明` 会根据产品名/厂商生成不含“or”的 FOFA 测绘语句和 FOFA Web 查询 URL；查询语法按 `app`、`product`、`title`、`header`、直接关键词、`body` 的精确度顺序选择，不按返回数量最大值倒向宽泛语句。截图直接使用原生 Chrome DevTools MCP，不使用 Playwright。需要登录时人工微信扫码，随后用 MCP 执行 `fofa_assets.py generate` 输出的页面提取脚本获取 `asset_count`、`has_results` 和 `no_result`。只有 `has_results=true` 时才截图并回填 Word；回填命令必须带 `--has-results true/false`。如果 `has_results=false`、`no_result=true`、`asset_count=0` 或未识别数量，资产数量写“未检索到互联网资产/待回填”，截图写“无”，不得保留空结果页截图。截图文件名建议包含产品名或 DAS-ID；准备阶段会先按产品/标题/查询语句匹配截图文件名，避免误用其他漏洞的最新截图，`apply` 未传 `--screenshot-path` 时才自动使用默认目录最新截图兜底。若配置 `FOFA_API_ENABLED=true` 和 `FOFA_API_KEY`，也可读取 FOFA API 返回 JSON 的 `size` 作为是否有结果的依据：`size>0` 可保留截图，`size=0` 不保留截图。
 
 可单独运行：
 
@@ -300,7 +301,7 @@ await selectElementUiByLabel('漏洞详细分类', '<漏洞详细分类>', '其�
 | 其他下拉框 | 选择“其他” |
 | 其他输入框/文本域 | 填写“见附件” |
 | `SQL注入Poc` radio | 根据 `request_method` 选 `get/post`，无法判断默认 `get` |
-| SQL 注入真实 PoC 内容 | 写入 CodeMirror 编辑器，内容只能来自 `poc_text` 中的原始 HTTP 请求或 curl 命令；只有 SQL 注入需要真实 PoC，其他分类继续填“见附件”。如果 Word 没有现成 PoC，不得根据 URL/请求方式自动拼接 |
+| SQL 注入真实 PoC 内容 | 写入 CodeMirror 编辑器，内容只能来自 `poc_text` 中的原始 HTTP 请求或 curl 命令；原始 HTTP 请求必须是 `GET /path HTTP/1.1` / `POST /path HTTP/1.1` 加逐行 Header 的格式。脚本会修复 Word 提取造成的 Header 换行丢失，但如果 Word 没有现成 PoC，不得根据 URL/请求方式自动拼接。只有 SQL 注入需要真实 PoC，其他分类继续填“见附件” |
 
 每次选择 `漏洞详细分类` 后必须先等待并按映射表主动补齐该分类的联动字段，再扫描可见必填字段兜底：
 
