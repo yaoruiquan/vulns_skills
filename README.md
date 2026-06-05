@@ -59,6 +59,30 @@ claude skills install https://github.com/yaoruiquan/vulns_skills.git
 
 如果使用公司内网 GitLab 或 SSH 地址，按下面“没有 SSH key 怎么办”先配置访问权限。
 
+#### Windows 安装
+
+Windows 推荐使用 PowerShell。先确认 Node.js 和 Claude Code 都在 PATH 中：
+
+```powershell
+node --version
+npx --version
+claude --version
+```
+
+然后执行：
+
+```powershell
+npx @yaoruiquan4/vulns-skills
+```
+
+如果 `npx` 执行失败，可以改用手动安装：
+
+```powershell
+claude skills install https://github.com/yaoruiquan/vulns_skills.git
+```
+
+如果提示 `claude` 不是可识别命令，先重新打开 PowerShell；仍不生效时，检查 Claude Code 安装目录是否加入了系统 PATH。Windows 上不要把仓库安装到含中文或特殊符号的深层路径，避免后续浏览器自动化、zip、docx、PDF 转换脚本处理路径时出错。
+
 ### 3. 初始化单个 skill
 
 进入具体 skill 目录后，可以直接让 agent 处理初始化：

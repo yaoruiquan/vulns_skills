@@ -22,7 +22,9 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
   process.exit(0);
 }
 
-const result = spawnSync("claude", ["skills", "install", REPO_URL], {
+const claudeCommand = process.platform === "win32" ? "claude.cmd" : "claude";
+
+const result = spawnSync(claudeCommand, ["skills", "install", REPO_URL], {
   stdio: "inherit"
 });
 
