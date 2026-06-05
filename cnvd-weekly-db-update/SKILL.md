@@ -1,3 +1,8 @@
+---
+name: cnvd-weekly-db-update
+description: CNVD 每周 XML 漏洞数据库更新技能。用于通过 SSH Key 免密登录和 Docker 容器操作处理 CNVD 周库 XML、执行 check/update 模式、归档结果并可选推送钉钉通知。
+---
+
 # CNVD 每周数据库更新
 
 通过 SSH Key 免密登录 + Docker 操作完成 CNVD 每周 XML 数据更新。

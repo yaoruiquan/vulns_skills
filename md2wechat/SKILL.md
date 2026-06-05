@@ -39,7 +39,7 @@ description: 将漏洞预警 Markdown 转换为安恒公众号风格 HTML，生�
    python3 scripts/render_wechat_article.py article.md --output /tmp/article.html --json
    ```
 
-3. 普通漏洞预警会解析标题、漏洞概述表、修复方案、参考资料、产品能力覆盖，并填充 `assets/wechat-alert-article-template.placeholders.html`。微软月度通报会解析安全通告、漏洞速览表、严重漏洞表、漏洞详情、修复方案和参考资料，并填充 `assets/wechat-microsoft-monthly-template.placeholders.html`。两类输出都会在 HTML 旁生成 `<html>.meta.json`，用于草稿标题、作者和摘要元数据。
+3. 普通漏洞预警会解析标题、漏洞概述表、修复方案、参考资料、产品能力覆盖，并填充 `assets/wechat-alert-article-template.placeholders.html`。微软月度通报会解析安全通告、漏洞速览表、严重漏洞表、漏洞详情、修复方案和参考资料，并填充 `assets/wechat-microsoft-monthly-template.placeholders.html`。两类输出都会在 HTML 旁生成 `<html>.meta.json`，用于草稿标题和摘要元数据。
    - 普通漏洞预警的“危害描述”必须来自 Markdown 中的具体漏洞描述/漏洞类型推导；不得使用“该产品主要使用客户行业分布广泛，漏洞危害性极高，建议客户尽快做好自查及防护。”这类固定泛化句。
 4. 校验 HTML：不得包含 `<style>`、`<script>`、`class=`、`contenteditable=`、`ProseMirror`、微信后台页面壳或旧漏洞内容；样式必须以内联 `style` 为主。
 5. 生成封面。默认使用 PPTX 模版：
@@ -83,8 +83,8 @@ description: 将漏洞预警 Markdown 转换为安恒公众号风格 HTML，生�
 
 - 创建草稿前必须有本地封面图片。
 - 创建草稿前必须校验 md2wechat 配置。
-- 创建草稿需要文章标题、作者、摘要、正文 HTML 和封面。
-- 标题、作者、摘要用于公众号草稿元数据，不等同于正文可见内容。
+- 创建草稿需要文章标题、摘要、正文 HTML 和封面；不要写入作者字段。
+- 标题、摘要用于公众号草稿元数据，不等同于正文可见内容。
 - 当前机器的 `md2wechat` 支持 `test-draft <html_file> <cover_image>` 和 `create_draft <json_file>`；skill wrapper 会在存在 `<html>.meta.json` 时将 `test-draft` 升级为 `create_draft`，避免标题退回默认值。
 - 存在 `<html>.meta.json` 时优先调用 `scripts/create_alert_draft.py <html> <cover> --metadata <meta> --draft-json <draft-payload.json> --result-json <draft-result.json> --create --json`，该脚本直接调用微信接口，不依赖 `md2wechat create_draft`。
 - 如果微信接口返回 IP 白名单、凭据错误、额度或素材错误，必须保留返回 JSON，并明确标记草稿创建失败。
